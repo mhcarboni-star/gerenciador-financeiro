@@ -334,3 +334,26 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .invoice-head > div { display: flex; flex-direction: column; gap: 4px; }
 .invoice-head .tag { align-self: flex-start; }
 .invoice-total { font-size: 1.7rem; font-variant-numeric: tabular-nums; }
+
+/* ---------- Fase 3: empréstimos ---------- */
+.head-actions { display: flex; gap: 8px; align-items: center; }
+.loan-balance { display: flex; flex-direction: column; gap: 4px; margin-bottom: 16px; border-color: #fcd34d; background: linear-gradient(0deg, var(--surface), var(--surface)); }
+.loan-balance .btn { align-self: flex-start; margin-top: 10px; }
+.loan-balance.done { border-color: var(--border); }
+.loan-balance .tag { align-self: flex-start; }
+.inst-num { width: 52px; flex: none; text-align: center; font-size: 0.8rem; font-weight: 700; color: var(--muted); }
+.tag.inline { margin-left: 8px; vertical-align: middle; }
+.danger-link { color: var(--neg); }
+@media (max-width: 420px) { .nav-link { font-size: 0.68rem; } }
+/* 5 abas no celular: cada item divide a largura e o texto encolhe em vez de alargar a página */
+.nav-link { flex: 1 1 0; min-width: 0; }
+.nav-link span { max-width: 100%; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+@media (max-width: 859px) { .nav-link { font-size: 0.7rem; } }
+/* Colunas nunca crescem além da tela por causa de um texto longo */
+.grid-2 { grid-template-columns: minmax(0, 1fr); }
+.tiles { grid-template-columns: minmax(0, 1fr); }
+@media (min-width: 600px) { .tiles { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 860px) { .grid-2 { grid-template-columns: repeat(2, minmax(0, 1fr)); } }
+@media (min-width: 1100px) { .tiles { grid-template-columns: repeat(3, minmax(0, 1fr)); } }
+.tx-main > .small { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tx-main > .small.wrap { white-space: normal; }

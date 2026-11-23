@@ -49,3 +49,11 @@ export function shortDate(iso: string) {
   const [, m, d] = iso.slice(0, 10).split("-");
   return `${d}/${m}`;
 }
+
+/** Soma meses a uma data YYYY-MM-DD, ajustando o fim de mês. */
+export function addMonthsIso(iso: string, months: number) {
+  const [y, m, d] = iso.split("-").map(Number);
+  const last = new Date(y, m - 1 + months + 1, 0).getDate();
+  const t = new Date(y, m - 1 + months, Math.min(d, last));
+  return `${t.getFullYear()}-${String(t.getMonth() + 1).padStart(2, "0")}-${String(t.getDate()).padStart(2, "0")}`;
+}

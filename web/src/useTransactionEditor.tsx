@@ -3,6 +3,7 @@ import { api, type Account, type Category, type CreditCard, type Transaction } f
 import { Modal } from "./components/Modal";
 import { TransactionForm } from "./components/TransactionForm";
 import { ConfirmForm } from "./components/ConfirmForm";
+import { LoanPayForm } from "./components/LoanPayForm";
 import { money, shortDate } from "./format";
 
 type State = { mode: "new" } | { mode: "edit"; tx: Transaction } | { mode: "confirm"; tx: Transaction } | null;
@@ -28,7 +29,23 @@ export function useTransactionEditor(onChange: () => void) {
   };
 
   let modal = null;
-  if (state?.mode === "confirm") {
+  if (state?.mode === "confirm" && state.tx.type === "LOAN_PAYMENT") {
+    const tx = state.tx;
+    modal = (
+      <Modal title="Confirmar pagamento" onClose={close}>
+        <LoanPayForm
+          title={tx.description}
+          expectedCents={tx.amountCents}
+          dueDate={tx.date.slice(0, 10)}
+          defaultAccountId={tx.accountId ?? ""}
+          accounts={accounts}
+          submitLabel="Confirmar"
+          onSubmit={(d) => api.confirmLoanPayment(tx.id, d)}
+          onSaved={done}
+        />
+      </Modal>
+    );
+  } else if (state?.mode === "confirm") {
     modal = (
       <Modal title={state.tx.type === "INCOME" ? "Confirmar recebimento" : "Confirmar pagamento"} onClose={close}>
         <ConfirmForm tx={state.tx} accounts={accounts} cards={cards} onSaved={done} />
@@ -53,7 +70,11 @@ export function useTransactionEditor(onChange: () => void) {
     openNew: () => setState({ mode: "new" }),
     // Lançamento previsto abre direto a confirmação.
     openEdit: (tx: Transaction) =>
-      setState(tx.status === "PENDING" && (tx.type === "INCOME" || tx.type === "EXPENSE") ? { mode: "confirm", tx } : { mode: "edit", tx }),
+      setState(
+        tx.status === "PENDING" && (tx.type === "INCOME" || tx.type === "EXPENSE" || tx.type === "LOAN_PAYMENT")
+          ? { mode: "confirm", tx }
+          : { mode: "edit", tx },
+      ),
     openForm: (tx: Transaction) => setState({ mode: "edit", tx }),
     openConfirm: (tx: Transaction) => setState({ mode: "confirm", tx }),
     modal,

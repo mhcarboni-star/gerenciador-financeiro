@@ -129,6 +129,70 @@ export interface Recurrence extends RecurrenceInput {
   nextPending: { id: string; date: string; amountCents: number } | null;
 }
 
+export type LoanInterestType = "NONE" | "PRICE" | "MONTHLY_ON_BALANCE";
+
+export interface LoanStatementLine {
+  id: string;
+  accountId: string | null;
+  number: number | null;
+  date: string;
+  status: "PAID" | "PENDING";
+  description: string;
+  amountCents: number;
+  interestCents: number | null;
+  principalCents: number | null;
+  balanceAfterCents: number;
+}
+
+export interface Loan {
+  id: string;
+  name: string;
+  lender: string | null;
+  color: string;
+  notes: string | null;
+  interestType: LoanInterestType;
+  monthlyRate: number | null;
+  installmentCount: number | null;
+  principalCents: number;
+  startDate: string;
+  firstDueDate: string | null;
+  receivedAccountId: string | null;
+  paymentAccountId: string | null;
+  status: "ACTIVE" | "PAID_OFF" | "CANCELLED";
+  paidOffAt: string | null;
+  principalOutstandingCents: number;
+  accruedInterestCents: number;
+  balanceTodayCents: number;
+  totalPaidCents: number;
+  interestPaidCents: number;
+  paidInstallments: number;
+  pendingInstallments: number;
+  pendingAmountCents: number;
+  nextDueDate: string | null;
+  statement: LoanStatementLine[];
+}
+
+export interface LoanInput {
+  name: string;
+  lender: string | null;
+  principalCents: number;
+  interestType: LoanInterestType;
+  monthlyRate: number | null;
+  installmentCount: number | null;
+  startDate: string;
+  firstDueDate: string | null;
+  receivedAccountId: string | null;
+  paymentAccountId: string;
+  color: string;
+  notes: string | null;
+}
+
+export interface LoanPaymentInput {
+  amountCents: number;
+  date: string;
+  accountId: string;
+}
+
 export interface Pending {
   today: string;
   overdue: Transaction[];
@@ -273,6 +337,31 @@ export const api = {
   invoice: (id: string) => request<InvoiceDetail>(`/invoices/${id}`),
   payInvoice: (id: string, d: { accountId: string; amountCents: number; date: string }) =>
     request<{ paidOff: boolean }>(`/invoices/${id}/pagar`, { method: "POST", body: json(d) }),
+
+  loans: () => request<Loan[]>("/loans"),
+  loan: (id: string) => request<Loan>(`/loans/${id}`),
+  createLoan: (d: LoanInput) => request<{ id: string }>("/loans", { method: "POST", body: json(d) }),
+  updateLoan: (id: string, d: Pick<LoanInput, "name" | "lender" | "paymentAccountId" | "color" | "notes">) =>
+    request<{ ok: true }>(`/loans/${id}`, { method: "PUT", body: json(d) }),
+  deleteLoan: (id: string) => request<void>(`/loans/${id}`, { method: "DELETE" }),
+  payLoan: (id: string, d: LoanPaymentInput) => request<Loan>(`/loans/${id}/pagamentos`, { method: "POST", body: json(d) }),
+  confirmLoanPayment: (txId: string, d: LoanPaymentInput) =>
+    request<Loan>(`/loans/pagamentos/${txId}/confirmar`, { method: "POST", body: json(d) }),
+  undoLoanPayment: (txId: string) => request<Loan>(`/loans/pagamentos/${txId}`, { method: "DELETE" }),
+  /** Baixa o PDF (precisa do token, por isso não é um link direto). */
+  downloadLoansPdf: async () => {
+    const res = await fetch("/api/loans/relatorio.pdf", { headers: { Authorization: `Bearer ${tokenStore.get()}` } });
+    if (!res.ok) throw new ApiError(res.status, "Não foi possível gerar o relatório");
+    const blob = await res.blob();
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement("a");
+    a.href = url;
+    a.download = res.headers.get("Content-Disposition")?.match(/filename="(.+)"/)?.[1] ?? "emprestimos.pdf";
+    document.body.appendChild(a);
+    a.click();
+    a.remove();
+    setTimeout(() => URL.revokeObjectURL(url), 10_000);
+  },
 
   summary: (month: string) => request<Summary>(`/summary?month=${month}`),
 };

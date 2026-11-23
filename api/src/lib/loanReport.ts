@@ -3,6 +3,8 @@ import { prisma } from "./prisma.js";
 export type LoanInterestType = "NONE" | "PRICE" | "MONTHLY_ON_BALANCE";
 
 export interface StatementLine {
+  id: string;
+  accountId: string | null;
   number: number | null; // nº da parcela; null = pagamento avulso
   date: string;
   status: "PAID" | "PENDING";
@@ -15,6 +17,11 @@ export interface StatementLine {
 
 export interface LoanReport {
   id: string;
+  color: string;
+  notes: string | null;
+  firstDueDate: string | null;
+  receivedAccountId: string | null;
+  paymentAccountId: string | null;
   name: string;
   lender: string | null;
   interestType: LoanInterestType;
@@ -51,9 +58,13 @@ interface BalanceRow {
 }
 
 /** Dados do relatório de empréstimos de um grupo (todos, ou só os ativos). */
-export async function buildLoanReport(householdId: string, opts: { onlyActive?: boolean } = {}): Promise<LoanReport[]> {
+export async function buildLoanReport(householdId: string, opts: { onlyActive?: boolean; loanId?: string } = {}): Promise<LoanReport[]> {
   const loans = await prisma.loan.findMany({
-    where: { householdId, ...(opts.onlyActive ? { status: "ACTIVE" } : { status: { not: "CANCELLED" } }) },
+    where: {
+      householdId,
+      ...(opts.loanId ? { id: opts.loanId } : {}),
+      ...(opts.onlyActive ? { status: "ACTIVE" } : { status: { not: "CANCELLED" } }),
+    },
     include: {
       transactions: {
         where: { type: "LOAN_PAYMENT" },
@@ -77,6 +88,8 @@ export async function buildLoanReport(householdId: string, opts: { onlyActive?: 
     const statement: StatementLine[] = [...paid, ...pending].map((t) => {
       balance -= t.loanPrincipalCents ?? t.amountCents;
       return {
+        id: t.id,
+        accountId: t.accountId,
         number: t.loanInstallmentNumber,
         date: iso(t.date)!,
         status: t.status,
@@ -90,6 +103,11 @@ export async function buildLoanReport(householdId: string, opts: { onlyActive?: 
 
     return {
       id: l.id,
+      color: l.color,
+      notes: l.notes,
+      firstDueDate: iso(l.firstDueDate),
+      receivedAccountId: l.receivedAccountId,
+      paymentAccountId: l.paymentAccountId,
       name: l.name,
       lender: l.lender,
       interestType: l.interestType,

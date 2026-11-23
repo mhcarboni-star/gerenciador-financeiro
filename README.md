@@ -84,7 +84,10 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 | GET | `/api/invoices/card/:cardId`, `/api/invoices/:id` | Faturas de um cartão / detalhe |
 | POST | `/api/invoices/:id/pagar` | Paga a fatura (total ou parcial) |
 | GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias |
-| GET | `/api/loans`, `/api/loans/relatorio.pdf` | Empréstimos e relatório em PDF |
+| GET/POST/PUT/DELETE | `/api/loans[/:id]` | Empréstimos (cadastro gera parcelas e entrada do dinheiro) |
+| POST | `/api/loans/:id/pagamentos` | Pagamento avulso / antecipação (recalcula as parcelas) |
+| POST/DELETE | `/api/loans/pagamentos/:txId[/confirmar]` | Confirma parcela prevista / desfaz pagamento |
+| GET | `/api/loans/relatorio.pdf` | Relatório de empréstimos em PDF |
 
 ## Próximos passos sugeridos
 
@@ -92,6 +95,7 @@ O banco já suporta os itens abaixo; faltam as telas e rotas da API:
 
 - Orçamento mensal por categoria e metas de economia
 - Convites para o grupo familiar
+- Avisos no celular das contas do dia (Web Push + tarefa agendada)
 
 Depois:
 
