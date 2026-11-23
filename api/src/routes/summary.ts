@@ -1,6 +1,6 @@
 import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
-import { uid, type AuthRequest } from "../lib/auth.js";
+import { hid, type AuthRequest } from "../lib/auth.js";
 import { ah } from "../lib/http.js";
 import { currentMonth, monthRange } from "../lib/dates.js";
 
@@ -10,27 +10,28 @@ export const summaryRouter = Router();
 summaryRouter.get(
   "/",
   ah(async (req: AuthRequest, res) => {
-    const userId = uid(req);
+    const householdId = hid(req);
+    const types = { in: ["INCOME", "EXPENSE"] as ("INCOME" | "EXPENSE")[] };
     const month = typeof req.query.month === "string" ? req.query.month : currentMonth();
     const range = monthRange(month);
 
     const [byType, byCategory, cumulative, categories] = await Promise.all([
       prisma.transaction.groupBy({
         by: ["type"],
-        where: { userId, date: range },
+        where: { householdId, type: types, date: range },
         _sum: { amountCents: true },
       }),
       prisma.transaction.groupBy({
         by: ["categoryId", "type"],
-        where: { userId, date: range },
+        where: { householdId, type: types, date: range },
         _sum: { amountCents: true },
       }),
       prisma.transaction.groupBy({
         by: ["type"],
-        where: { userId, date: { lt: range.lt } },
+        where: { householdId, type: types, date: { lt: range.lt } },
         _sum: { amountCents: true },
       }),
-      prisma.category.findMany({ where: { userId } }),
+      prisma.category.findMany({ where: { householdId } }),
     ]);
 
     const sum = (rows: typeof byType, type: string) =>

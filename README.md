@@ -5,6 +5,7 @@ Aplicação web para controle financeiro pessoal. Funciona no celular e no PC co
 ## Funcionalidades
 
 - Cadastro e login com e-mail e senha
+- Uso individual ou compartilhado (grupo familiar)
 - Lançamentos de receitas e despesas, com categoria, data e observações
 - Resumo do mês: receitas, despesas, saldo do mês e saldo acumulado
 - Gráfico de despesas por categoria
@@ -18,14 +19,17 @@ Aplicação web para controle financeiro pessoal. Funciona no celular e no PC co
 | -------- | -------------------------------------------------- |
 | Frontend | React 18, TypeScript, Vite, React Router, PWA      |
 | Backend  | Node.js, Express 5, TypeScript, Zod, JWT           |
-| Banco    | PostgreSQL via Prisma                              |
+| Banco    | PostgreSQL (Supabase) via Prisma                   |
 
 Valores monetários são guardados em centavos (inteiros) para evitar erros de arredondamento.
 
 ```
 api/   → API REST (Express + Prisma); em produção também entrega o frontend
 web/   → aplicação React
+docs/  → documentação (estrutura do banco em docs/banco-de-dados.md)
 ```
+
+A estrutura do banco (grupos compartilhados, contas, cartões e faturas, parcelas, recorrências, orçamentos e metas) está descrita em [docs/banco-de-dados.md](docs/banco-de-dados.md).
 
 ## Rodando localmente
 
@@ -33,7 +37,7 @@ Pré-requisitos: Node.js 20+ e PostgreSQL.
 
 ```bash
 npm install
-cp api/.env.example api/.env   # ajuste DATABASE_URL e JWT_SECRET
+cp api/.env.example api/.env   # ajuste DATABASE_URL, DIRECT_URL e JWT_SECRET
 npm run db:migrate             # cria as tabelas
 npm run dev                    # API em :3333 e site em :5173
 ```
@@ -47,13 +51,17 @@ npm run build
 npm start      # aplica migrações e sobe tudo na porta $PORT
 ```
 
-Variáveis de ambiente: `DATABASE_URL`, `JWT_SECRET` (valor longo e aleatório) e, opcionalmente, `PORT`.
+Variáveis de ambiente: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET` (valor longo e aleatório) e, opcionalmente, `PORT`.
 
-### Deploy no Render (gratuito)
+### Banco no Supabase
 
-O arquivo `render.yaml` já descreve o serviço web e o banco PostgreSQL. No [Render](https://render.com), vá em **New → Blueprint**, selecione este repositório e confirme. Depois, abra o endereço gerado no celular e use "Adicionar à tela inicial".
+Siga o passo a passo em [docs/banco-de-dados.md → Configurando o Supabase](docs/banco-de-dados.md#configurando-o-supabase).
 
-> No plano gratuito do Render o serviço "dorme" após inatividade (o primeiro acesso demora alguns segundos) e o banco gratuito expira depois de um período. Veja os limites atuais no site do Render antes de guardar dados importantes.
+### Servidor no Render (gratuito)
+
+O arquivo `render.yaml` descreve o serviço. No [Render](https://render.com), vá em **New → Blueprint**, selecione este repositório e preencha `DATABASE_URL` e `DIRECT_URL` com os dados do Supabase. Depois, abra o endereço gerado no celular e use "Adicionar à tela inicial".
+
+> No plano gratuito do Render o serviço "dorme" após inatividade (o primeiro acesso demora alguns segundos).
 
 ## API
 
@@ -71,8 +79,15 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 
 ## Próximos passos sugeridos
 
-- Lançamentos recorrentes (aluguel, assinaturas) e parcelados
-- Contas e cartões de crédito separados
-- Orçamento mensal por categoria com alertas
+O banco já suporta os itens abaixo; faltam as telas e rotas da API:
+
+- Contas e transferências, saldo por conta
+- Cartões de crédito com faturas
+- Lançamentos parcelados e recorrentes, contas a pagar
+- Orçamento mensal por categoria e metas de economia
+- Convites para o grupo familiar
+
+Depois:
+
 - Gráfico de evolução mensal
 - Exportar/importar CSV e extrato bancário (OFX)

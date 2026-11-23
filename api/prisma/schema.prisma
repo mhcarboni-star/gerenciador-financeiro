@@ -1,52 +1,385 @@
+// Estrutura do banco do Gerenciador Financeiro.
+// Documentação completa: docs/banco-de-dados.md
+//
+// Convenções:
+// - Valores monetários em centavos (Int), sempre positivos; o sentido vem do tipo do lançamento.
+// - Tudo que é dado financeiro pertence a um Grupo (Household), nunca direto a um usuário,
+//   para permitir uso compartilhado (casal/família).
+// - Datas sem hora usam @db.Date. Meses de referência são guardados como o dia 1 do mês.
+// - "Arquivar" (archivedAt) em vez de excluir, para não quebrar o histórico.
+
 generator client {
   provider = "prisma-client-js"
 }
 
 datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
+  provider  = "postgresql"
+  // No Supabase: DATABASE_URL = conexão via pooler (porta 6543, ?pgbouncer=true)
+  //              DIRECT_URL   = conexão direta (porta 5432), usada pelas migrações
+  url       = env("DATABASE_URL")
+  directUrl = env("DIRECT_URL")
 }
 
-enum TransactionType {
+// ─────────────────────────── Enums ───────────────────────────
+
+enum MemberRole {
+  OWNER // pode convidar/remover membros e excluir o grupo
+  MEMBER
+}
+
+enum AccountType {
+  CHECKING // conta corrente
+  SAVINGS // poupança
+  CASH // carteira / dinheiro
+  INVESTMENT
+  OTHER
+}
+
+enum CategoryType {
   INCOME
   EXPENSE
 }
 
-model User {
-  id           String        @id @default(cuid())
-  name         String
-  email        String        @unique
-  passwordHash String
-  createdAt    DateTime      @default(now())
-  categories   Category[]
-  transactions Transaction[]
+enum TransactionType {
+  INCOME // entrada em uma conta (ou estorno no cartão)
+  EXPENSE // saída de uma conta ou compra no cartão
+  TRANSFER // conta → conta (não entra em receitas/despesas)
+  INVOICE_PAYMENT // pagamento de fatura: conta → cartão (não é despesa; as compras já foram)
 }
+
+enum TransactionStatus {
+  PENDING // previsto / a pagar / a receber
+  PAID // efetivado
+}
+
+enum InvoiceStatus {
+  OPEN
+  CLOSED
+  PAID
+}
+
+enum Frequency {
+  DAILY
+  WEEKLY
+  MONTHLY
+  YEARLY
+}
+
+// ─────────────────────── Usuários e grupos ───────────────────────
+
+model User {
+  id           String   @id @default(cuid())
+  name         String
+  email        String   @unique
+  passwordHash String
+  createdAt    DateTime @default(now())
+  updatedAt    DateTime @updatedAt
+
+  memberships         HouseholdMember[]
+  invitesSent         HouseholdInvite[] @relation("InviteSender")
+  transactionsCreated Transaction[]     @relation("TransactionCreator")
+  accountsOwned       Account[]         @relation("AccountOwner")
+  cardsHeld           CreditCard[]      @relation("CardHolder")
+}
+
+/// Grupo financeiro (ex.: "Casa"). Todos os dados financeiros pertencem a um grupo.
+model Household {
+  id        String   @id @default(cuid())
+  name      String
+  currency  String   @default("BRL")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  members          HouseholdMember[]
+  invites          HouseholdInvite[]
+  accounts         Account[]
+  creditCards      CreditCard[]
+  categories       Category[]
+  transactions     Transaction[]
+  installmentPlans InstallmentPlan[]
+  recurrences      Recurrence[]
+  budgets          Budget[]
+  goals            Goal[]
+}
+
+model HouseholdMember {
+  householdId String
+  userId      String
+  role        MemberRole @default(MEMBER)
+  joinedAt    DateTime   @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@id([householdId, userId])
+  @@index([userId])
+}
+
+/// Convite por e-mail para entrar em um grupo.
+model HouseholdInvite {
+  id          String     @id @default(cuid())
+  householdId String
+  email       String
+  role        MemberRole @default(MEMBER)
+  token       String     @unique
+  invitedById String
+  expiresAt   DateTime
+  acceptedAt  DateTime?
+  createdAt   DateTime   @default(now())
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  invitedBy User      @relation("InviteSender", fields: [invitedById], references: [id], onDelete: Cascade)
+
+  @@index([householdId])
+  @@index([email])
+}
+
+// ─────────────────────── Contas e cartões ───────────────────────
+
+model Account {
+  id                  String      @id @default(cuid())
+  householdId         String
+  name                String
+  type                AccountType @default(CHECKING)
+  institution         String? /// banco/corretora
+  initialBalanceCents Int         @default(0) /// pode ser negativo (ex.: conta no cheque especial)
+  color               String      @default("#64748b")
+  includeInTotals     Boolean     @default(true) /// soma no saldo geral?
+  ownerId             String? /// de quem é a conta (opcional; null = conjunta)
+  archivedAt          DateTime?
+  createdAt           DateTime    @default(now())
+  updatedAt           DateTime    @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  owner     User?     @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
+
+  transactions        Transaction[]     @relation("TxAccount")
+  incomingTransfers   Transaction[]     @relation("TxDestination")
+  cardsPaidFromHere   CreditCard[]
+  recurrences         Recurrence[]      @relation("RecAccount")
+  recurrenceTransfers Recurrence[]      @relation("RecDestination")
+  installmentPlans    InstallmentPlan[]
+  goals               Goal[]
+
+  @@index([householdId])
+}
+
+model CreditCard {
+  id               String    @id @default(cuid())
+  householdId      String
+  name             String
+  brand            String? /// Visa, Mastercard...
+  limitCents       Int       @default(0)
+  closingDay       Int /// dia do mês em que a fatura fecha (1–31)
+  dueDay           Int /// dia do mês do vencimento (1–31)
+  paymentAccountId String? /// conta padrão para pagar a fatura
+  holderId         String? /// titular
+  color            String    @default("#334155")
+  archivedAt       DateTime?
+  createdAt        DateTime  @default(now())
+  updatedAt        DateTime  @updatedAt
+
+  household      Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  paymentAccount Account?  @relation(fields: [paymentAccountId], references: [id], onDelete: SetNull)
+  holder         User?     @relation("CardHolder", fields: [holderId], references: [id], onDelete: SetNull)
+
+  invoices         CreditCardInvoice[]
+  transactions     Transaction[]
+  installmentPlans InstallmentPlan[]
+  recurrences      Recurrence[]
+
+  @@index([householdId])
+}
+
+/// Fatura mensal de um cartão. Criada sob demanda quando o primeiro lançamento cai nela.
+/// As datas ficam gravadas porque o banco pode mudar o fechamento de um mês para outro.
+model CreditCardInvoice {
+  id             String        @id @default(cuid())
+  creditCardId   String
+  referenceMonth DateTime      @db.Date /// dia 1 do mês da fatura (mês do vencimento)
+  closingDate    DateTime      @db.Date
+  dueDate        DateTime      @db.Date
+  status         InvoiceStatus @default(OPEN)
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+
+  creditCard   CreditCard    @relation(fields: [creditCardId], references: [id], onDelete: Cascade)
+  /// compras/estornos da fatura E pagamentos dela (type = INVOICE_PAYMENT)
+  transactions Transaction[]
+
+  @@unique([creditCardId, referenceMonth])
+}
+
+// ─────────────────────── Categorias ───────────────────────
 
 model Category {
-  id           String          @id @default(cuid())
-  name         String
-  type         TransactionType
-  color        String          @default("#64748b")
-  userId       String
-  user         User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  transactions Transaction[]
+  id          String       @id @default(cuid())
+  householdId String
+  parentId    String? /// subcategoria de...
+  name        String
+  type        CategoryType
+  color       String       @default("#64748b")
+  icon        String?
+  archivedAt  DateTime?
+  createdAt   DateTime     @default(now())
+  updatedAt   DateTime     @updatedAt
 
-  @@unique([userId, name, type])
+  household Household  @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  parent    Category?  @relation("Subcategories", fields: [parentId], references: [id], onDelete: Cascade)
+  children  Category[] @relation("Subcategories")
+
+  transactions     Transaction[]
+  installmentPlans InstallmentPlan[]
+  recurrences      Recurrence[]
+  budgets          Budget[]
+
+  @@index([householdId])
+  @@index([parentId])
 }
 
-model Transaction {
-  id          String          @id @default(cuid())
-  description String
-  /// Valor em centavos, sempre positivo; o sinal vem de `type`.
-  amountCents Int
-  type        TransactionType
-  date        DateTime        @db.Date
-  notes       String?
-  categoryId  String?
-  category    Category?       @relation(fields: [categoryId], references: [id], onDelete: SetNull)
-  userId      String
-  user        User            @relation(fields: [userId], references: [id], onDelete: Cascade)
-  createdAt   DateTime        @default(now())
+// ─────────────────────── Lançamentos ───────────────────────
 
-  @@index([userId, date])
+/// Toda movimentação de dinheiro. Regras por tipo (garantidas por CHECK no banco):
+/// - INCOME/EXPENSE:   exatamente um entre accountId e creditCardId; no cartão, invoiceId obrigatório
+/// - TRANSFER:         accountId (origem) + destinationAccountId (destino), diferentes
+/// - INVOICE_PAYMENT:  accountId (de onde sai) + invoiceId (fatura paga)
+model Transaction {
+  id          String            @id @default(cuid())
+  householdId String
+  type        TransactionType
+  status      TransactionStatus @default(PAID)
+  description String
+  amountCents Int /// sempre > 0
+  date        DateTime          @db.Date /// data da compra/recebimento (ou vencimento, se pendente)
+  notes       String?
+
+  accountId            String?
+  destinationAccountId String?
+  creditCardId         String?
+  invoiceId            String?
+  categoryId           String?
+
+  installmentPlanId String?
+  installmentNumber Int? /// 1..installmentCount
+  recurrenceId      String?
+  goalId            String? /// aporte/resgate de uma meta
+
+  createdById String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household          Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account            Account?           @relation("TxAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  destinationAccount Account?           @relation("TxDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  creditCard         CreditCard?        @relation(fields: [creditCardId], references: [id], onDelete: Restrict)
+  invoice            CreditCardInvoice? @relation(fields: [invoiceId], references: [id], onDelete: Restrict)
+  category           Category?          @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  installmentPlan    InstallmentPlan?   @relation(fields: [installmentPlanId], references: [id], onDelete: Cascade)
+  recurrence         Recurrence?        @relation(fields: [recurrenceId], references: [id], onDelete: SetNull)
+  goal               Goal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  createdBy          User?              @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+
+  @@unique([installmentPlanId, installmentNumber])
+  @@unique([recurrenceId, date]) /// impede gerar a mesma ocorrência duas vezes
+  @@index([householdId, date])
+  @@index([accountId, date])
+  @@index([destinationAccountId])
+  @@index([invoiceId])
+  @@index([categoryId])
+}
+
+/// Compra parcelada. As parcelas são lançamentos com installmentPlanId + installmentNumber.
+model InstallmentPlan {
+  id               String   @id @default(cuid())
+  householdId      String
+  description      String
+  totalAmountCents Int
+  installmentCount Int
+  firstDate        DateTime @db.Date
+  accountId        String?
+  creditCardId     String?
+  categoryId       String?
+  createdAt        DateTime @default(now())
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: Restrict)
+  creditCard   CreditCard?   @relation(fields: [creditCardId], references: [id], onDelete: Restrict)
+  category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([householdId])
+}
+
+/// Modelo de lançamento fixo (aluguel, salário, assinatura). A API gera os lançamentos
+/// até um horizonte (ex.: 3 meses à frente) e avança nextDate.
+model Recurrence {
+  id                   String          @id @default(cuid())
+  householdId          String
+  type                 TransactionType
+  description          String
+  amountCents          Int
+  frequency            Frequency       @default(MONTHLY)
+  interval             Int             @default(1) /// a cada N períodos
+  startDate            DateTime        @db.Date
+  endDate              DateTime?       @db.Date
+  nextDate             DateTime        @db.Date /// próxima ocorrência ainda não gerada
+  accountId            String?
+  destinationAccountId String?
+  creditCardId         String?
+  categoryId           String?
+  autoMarkPaid         Boolean         @default(false) /// gerar já como PAID (ex.: débito automático)
+  active               Boolean         @default(true)
+  createdAt            DateTime        @default(now())
+  updatedAt            DateTime        @updatedAt
+
+  household          Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account            Account?      @relation("RecAccount", fields: [accountId], references: [id], onDelete: Restrict)
+  destinationAccount Account?      @relation("RecDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
+  creditCard         CreditCard?   @relation(fields: [creditCardId], references: [id], onDelete: Restrict)
+  category           Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
+  transactions       Transaction[]
+
+  @@index([householdId, active, nextDate])
+}
+
+// ─────────────────────── Planejamento ───────────────────────
+
+/// Limite de gasto de uma categoria em um mês.
+model Budget {
+  id          String   @id @default(cuid())
+  householdId String
+  categoryId  String
+  month       DateTime @db.Date /// dia 1 do mês
+  limitCents  Int
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@unique([categoryId, month])
+  @@index([householdId, month])
+}
+
+/// Objetivo de economia. Progresso = initialCents + aportes (lançamentos com goalId).
+model Goal {
+  id           String    @id @default(cuid())
+  householdId  String
+  name         String
+  targetCents  Int
+  initialCents Int       @default(0)
+  targetDate   DateTime? @db.Date
+  accountId    String? /// conta onde o dinheiro da meta fica guardado
+  color        String    @default("#0f766e")
+  icon         String?
+  achievedAt   DateTime?
+  archivedAt   DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  account      Account?      @relation(fields: [accountId], references: [id], onDelete: SetNull)
+  transactions Transaction[]
+
+  @@index([householdId])
 }

@@ -1,4 +1,6 @@
-# Deploy em um clique no Render (render.com): New → Blueprint → selecione este repositório.
+# Deploy no Render (render.com): New → Blueprint → selecione este repositório.
+# O banco fica no Supabase: preencha DATABASE_URL e DIRECT_URL no painel do Render
+# (veja docs/banco-de-dados.md → "Configurando o Supabase").
 services:
   - type: web
     name: gerenciador-financeiro
@@ -13,10 +15,6 @@ services:
       - key: JWT_SECRET
         generateValue: true
       - key: DATABASE_URL
-        fromDatabase:
-          name: gerenciador-financeiro-db
-          property: connectionString
-
-databases:
-  - name: gerenciador-financeiro-db
-    plan: free
+        sync: false
+      - key: DIRECT_URL
+        sync: false
