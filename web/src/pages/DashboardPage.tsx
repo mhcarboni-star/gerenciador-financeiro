@@ -1,6 +1,7 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Summary, type Transaction } from "../api";
+import { api, type Pending, type Summary, type Transaction } from "../api";
+import { PendingPanel } from "../components/PendingPanel";
 import { currentMonth, money } from "../format";
 import { MonthPicker } from "../components/MonthPicker";
 import { TransactionList } from "../components/TransactionList";
@@ -12,14 +13,16 @@ export function DashboardPage() {
   const [month, setMonth] = useState(currentMonth());
   const [summary, setSummary] = useState<Summary | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
+  const [pending, setPending] = useState<Pending | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
     setError("");
-    Promise.all([api.summary(month), api.transactions(month)])
-      .then(([s, t]) => {
+    Promise.all([api.summary(month), api.transactions(month), api.pending()])
+      .then(([s, t, p]) => {
         setSummary(s);
         setRecent(t.slice(0, 6));
+        setPending(p);
       })
       .catch((e) => setError(e.message));
   }, [month]);
@@ -41,6 +44,8 @@ export function DashboardPage() {
       </header>
 
       {error && <p className="error">{error}</p>}
+
+      <PendingPanel data={pending} onConfirm={editor.openConfirm} />
 
       <section className="stats">
         <div className="card stat">

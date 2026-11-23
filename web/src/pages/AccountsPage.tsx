@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
+import { useNavigate } from "react-router-dom";
 import { api, type Account, type AccountType, type CreditCard } from "../api";
 import { centsToInput, dayMonth, money, parseMoney } from "../format";
 import { Modal } from "../components/Modal";
@@ -21,6 +22,7 @@ export function AccountsPage() {
   const [showArchived, setShowArchived] = useState(false);
   const [editing, setEditing] = useState<Editing>(null);
   const [error, setError] = useState("");
+  const navigate = useNavigate();
 
   const load = useCallback(() => {
     setError("");
@@ -101,7 +103,7 @@ export function AccountsPage() {
         {cards.map((c) => {
           const pct = c.limitCents > 0 ? Math.min(100, (c.usedCents / c.limitCents) * 100) : 0;
           return (
-            <button key={c.id} className={`card tile ${c.archivedAt ? "archived" : ""}`} onClick={() => setEditing({ kind: "card", item: c })}>
+            <button key={c.id} className={`card tile ${c.archivedAt ? "archived" : ""}`} onClick={() => navigate(`/cartoes/${c.id}`)}>
               <span className="tile-bar" style={{ background: c.color }} />
               <span className="tile-title">{c.name}</span>
               <span className="muted small">
@@ -244,7 +246,7 @@ function AccountModal({ item, onClose, onSaved }: { item?: Account; onClose: () 
   );
 }
 
-function CardModal({ item, accounts, onClose, onSaved }: {
+export function CardModal({ item, accounts, onClose, onSaved }: {
   item?: CreditCard; accounts: Account[]; onClose: () => void; onSaved: () => void;
 }) {
   const [name, setName] = useState(item?.name ?? "");

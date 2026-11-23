@@ -296,3 +296,41 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .form label.check { flex-direction: row; align-items: center; gap: 10px; color: var(--text); }
 .form label.check input { width: 20px; height: 20px; }
 .tx-desc.sub { padding-left: 16px; color: var(--muted); }
+
+/* ---------- Fase 2: lançamentos ---------- */
+.neutral { color: var(--muted); }
+.info { margin: 0; padding: 10px 12px; border-radius: 10px; background: var(--bg); border: 1px solid var(--border); font-size: 0.85rem; color: var(--muted); }
+.badge { display: inline-block; margin-left: 8px; padding: 1px 7px; border-radius: 99px; font-size: 0.7rem; font-weight: 600; background: var(--bg); border: 1px solid var(--border); color: var(--muted); vertical-align: middle; }
+.tx.pending .tx-amount { opacity: 0.7; }
+.tag { display: inline-block; margin-right: 6px; padding: 1px 8px; border-radius: 99px; font-size: 0.72rem; font-weight: 700; }
+.tag.late { background: #fee2e2; color: #b91c1c; }
+.tag.today { background: #fef3c7; color: #b45309; }
+.tag.paid { background: #dcfce7; color: #15803d; }
+@media (prefers-color-scheme: dark) {
+  .tag.late { background: #450a0a; color: #fca5a5; }
+  .tag.today { background: #451a03; color: #fcd34d; }
+  .tag.paid { background: #052e16; color: #86efac; }
+}
+.hint.block { display: block; margin-top: 2px; }
+.hint.neg { color: var(--neg); }
+.hint.pos { color: var(--pos); }
+.form label.narrow { flex: 0 0 96px; }
+.form label.check { align-items: flex-start; }
+.form label.check input { margin-top: 2px; flex: none; }
+.group { border: 1px solid var(--border); border-radius: 12px; padding: 12px; margin: 0; display: flex; flex-direction: column; gap: 12px; }
+.confirm-head { display: flex; flex-direction: column; gap: 2px; }
+.confirm-head strong { font-size: 1.05rem; }
+
+.pending-panel { margin-bottom: 16px; border-color: #fcd34d; }
+.pending-panel .count { background: #b45309; color: #fff; border-radius: 99px; font-size: 0.75rem; font-weight: 700; padding: 2px 9px; }
+.due { width: 100%; display: flex; align-items: center; gap: 12px; padding: 12px 0; background: none; border: 0; text-align: left; cursor: pointer; }
+.small-btn { padding: 6px 12px; font-size: 0.85rem; background: var(--primary-soft); color: var(--primary); border-radius: 8px; font-weight: 600; }
+@media (max-width: 520px) { .due .small-btn { display: none; } }
+
+.invoice-picker { justify-content: center; margin-bottom: 12px; }
+.invoice-picker span { min-width: 220px; }
+.icon-btn:disabled { opacity: 0.35; cursor: default; }
+.invoice-head { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; }
+.invoice-head > div { display: flex; flex-direction: column; gap: 4px; }
+.invoice-head .tag { align-self: flex-start; }
+.invoice-total { font-size: 1.7rem; font-variant-numeric: tabular-nums; }

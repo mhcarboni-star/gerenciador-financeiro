@@ -8,6 +8,8 @@ export function parseMoney(input: string, allowNegative = false): number {
   const negative = allowNegative && /^[-−]/.test(s);
   if (negative) s = s.slice(1);
   if (s.includes(",")) s = s.replace(/\./g, "").replace(",", ".");
+  // "6.000" ou "1.250.000" sem vírgula = separador de milhar (padrão brasileiro)
+  else if (/^\d{1,3}(\.\d{3})+$/.test(s)) s = s.replace(/\./g, "");
   if (!/^\d+(\.\d{1,2})?$/.test(s)) return NaN;
   const cents = Math.round(Number(s) * 100);
   return negative ? -cents : cents;

@@ -67,25 +67,29 @@ O arquivo `render.yaml` descreve o serviço. No [Render](https://render.com), v�
 
 Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authorization: Bearer <token>`.
 
-| Método | Rota                           | Descrição                         |
-| ------ | ------------------------------ | --------------------------------- |
-| POST   | `/api/auth/register`           | Cria conta                        |
-| POST   | `/api/auth/login`              | Login                             |
-| GET    | `/api/auth/me`                 | Usuário atual                     |
-| GET    | `/api/summary?month=YYYY-MM`   | Resumo do mês                     |
-| GET    | `/api/transactions?month=...`  | Lançamentos do mês                |
-| POST/PUT/DELETE | `/api/transactions[/:id]` | Cria, edita, exclui lançamento |
-| GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias                  |
-| GET    | `/api/loans`                   | Empréstimos com saldo devedor e extrato |
-| GET    | `/api/loans/relatorio.pdf`     | Relatório de empréstimos em PDF   |
+| Método | Rota | Descrição |
+| ------ | ---- | --------- |
+| POST | `/api/auth/register`, `/api/auth/login` | Cria conta / login |
+| GET | `/api/auth/me` | Usuário atual |
+| GET | `/api/summary?month=YYYY-MM` | Resumo do mês |
+| GET/POST/PUT/DELETE | `/api/transactions[/:id]` | Lançamentos do mês (receitas/despesas em conta ou cartão) |
+| GET | `/api/transactions/pendentes` | Para confirmar: atrasados, hoje e próximos 7 dias |
+| POST | `/api/transactions/:id/confirmar` | Confirma um previsto (corrige valor/data; `updateForecast` opcional) |
+| POST/PUT | `/api/transactions/transferencia[/:id]` | Transferência entre contas |
+| POST/DELETE | `/api/installments[/:id]` | Compra parcelada (cria/exclui todas as parcelas) |
+| GET/POST/PUT | `/api/recurrences[/:id]` | Lançamentos recorrentes |
+| POST | `/api/recurrences/:id/encerrar` | Encerra uma recorrência |
+| GET/POST/PUT/DELETE | `/api/accounts[/:id]` | Contas com saldo atual e previsto |
+| GET/POST/PUT/DELETE | `/api/cards[/:id]` | Cartões com limite e fatura atual |
+| GET | `/api/invoices/card/:cardId`, `/api/invoices/:id` | Faturas de um cartão / detalhe |
+| POST | `/api/invoices/:id/pagar` | Paga a fatura (total ou parcial) |
+| GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias |
+| GET | `/api/loans`, `/api/loans/relatorio.pdf` | Empréstimos e relatório em PDF |
 
 ## Próximos passos sugeridos
 
 O banco já suporta os itens abaixo; faltam as telas e rotas da API:
 
-- Contas e transferências, saldo por conta
-- Cartões de crédito com faturas
-- Lançamentos parcelados e recorrentes, contas a pagar
 - Orçamento mensal por categoria e metas de economia
 - Convites para o grupo familiar
 

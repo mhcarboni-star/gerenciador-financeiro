@@ -1,4 +1,5 @@
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { Link } from "react-router-dom";
 import { api, type Transaction, type TxType } from "../api";
 import { currentMonth, money } from "../format";
 import { MonthPicker } from "../components/MonthPicker";
@@ -8,7 +9,7 @@ import { useTransactionEditor } from "../useTransactionEditor";
 export function TransactionsPage() {
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<Transaction[]>([]);
-  const [filter, setFilter] = useState<TxType | "ALL">("ALL");
+  const [filter, setFilter] = useState<TxType | "TRANSFER" | "ALL">("ALL");
   const [search, setSearch] = useState("");
   const [error, setError] = useState("");
 
@@ -23,17 +24,27 @@ export function TransactionsPage() {
     const q = search.trim().toLowerCase();
     return items.filter(
       (t) =>
-        (filter === "ALL" || t.type === filter) &&
+        (filter === "ALL" ||
+          t.type === filter ||
+          (filter === "EXPENSE" && t.type === "LOAN_PAYMENT") ||
+          (filter === "TRANSFER" && t.type === "INVOICE_PAYMENT")) &&
         (!q || t.description.toLowerCase().includes(q) || t.category?.name.toLowerCase().includes(q)),
     );
   }, [items, filter, search]);
 
-  const total = visible.reduce((s, t) => s + (t.type === "INCOME" ? t.amountCents : -t.amountCents), 0);
+  // Transferências e pagamentos de fatura não mudam o resultado do mês.
+  const total = visible.reduce(
+    (s, t) => s + (t.type === "INCOME" ? t.amountCents : t.type === "TRANSFER" || t.type === "INVOICE_PAYMENT" ? 0 : -t.amountCents),
+    0,
+  );
 
   return (
     <>
       <header className="page-head">
-        <h1>Lançamentos</h1>
+        <div>
+          <h1>Lançamentos</h1>
+          <Link to="/recorrencias" className="small">Recorrentes ›</Link>
+        </div>
         <MonthPicker value={month} onChange={setMonth} />
       </header>
 
@@ -44,6 +55,7 @@ export function TransactionsPage() {
               ["ALL", "Todos"],
               ["INCOME", "Receitas"],
               ["EXPENSE", "Despesas"],
+              ["TRANSFER", "Transf."],
             ] as const
           ).map(([v, l]) => (
             <button key={v} className={filter === v ? "active" : ""} onClick={() => setFilter(v)}>

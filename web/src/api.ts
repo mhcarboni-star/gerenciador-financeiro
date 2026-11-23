@@ -1,4 +1,6 @@
 export type TxType = "INCOME" | "EXPENSE";
+export type AnyTxType = TxType | "TRANSFER" | "INVOICE_PAYMENT" | "LOAN_RECEIPT" | "LOAN_PAYMENT";
+export type Frequency = "WEEKLY" | "MONTHLY" | "YEARLY";
 
 export interface User {
   id: string;
@@ -61,7 +63,7 @@ export interface Transaction {
   id: string;
   description: string;
   amountCents: number;
-  type: TxType;
+  type: AnyTxType;
   date: string;
   notes: string | null;
   categoryId: string | null;
@@ -71,6 +73,93 @@ export interface Transaction {
   creditCardId: string | null;
   account: SourceRef;
   creditCard: SourceRef;
+  destinationAccountId: string | null;
+  destinationAccount: SourceRef;
+  invoiceId: string | null;
+  recurrenceId: string | null;
+  installmentPlanId: string | null;
+  installmentNumber: number | null;
+  expectedAmountCents: number | null;
+  loan: { id: string; name: string } | null;
+  recurrence?: { id: string; amountIsEstimate: boolean; amountCents: number } | null;
+}
+
+export interface TransferInput {
+  description?: string;
+  amountCents: number;
+  date: string;
+  accountId: string;
+  destinationAccountId: string;
+  notes: string | null;
+}
+
+export interface InstallmentInput {
+  description: string;
+  totalAmountCents: number;
+  installmentCount: number;
+  firstDate: string;
+  accountId: string | null;
+  creditCardId: string | null;
+  categoryId: string | null;
+  notes: string | null;
+}
+
+export interface RecurrenceInput {
+  type: TxType;
+  description: string;
+  amountCents: number;
+  frequency: Frequency;
+  interval: number;
+  startDate: string;
+  endDate: string | null;
+  accountId: string | null;
+  creditCardId: string | null;
+  categoryId: string | null;
+  amountIsEstimate: boolean;
+  autoMarkPaid: boolean;
+}
+
+export interface Recurrence extends RecurrenceInput {
+  id: string;
+  active: boolean;
+  nextDate: string;
+  category: { id: string; name: string; color: string } | null;
+  account: { id: string; name: string } | null;
+  creditCard: { id: string; name: string } | null;
+  nextPending: { id: string; date: string; amountCents: number } | null;
+}
+
+export interface Pending {
+  today: string;
+  overdue: Transaction[];
+  dueToday: Transaction[];
+  upcoming: Transaction[];
+}
+
+export interface ConfirmInput {
+  amountCents: number;
+  date: string;
+  accountId: string | null;
+  creditCardId: string | null;
+  updateForecast: boolean;
+}
+
+export type InvoiceStatus = "OPEN" | "CLOSED" | "PAID";
+
+export interface InvoiceSummary {
+  id: string;
+  referenceMonth: string;
+  closingDate: string;
+  dueDate: string;
+  status: InvoiceStatus;
+  totalCents: number;
+  projectedTotalCents: number;
+  paidCents: number;
+}
+
+export interface InvoiceDetail extends InvoiceSummary {
+  creditCard: CreditCard;
+  transactions: Transaction[];
 }
 
 export interface TransactionInput {
@@ -165,6 +254,25 @@ export const api = {
   updateCard: (id: string, d: CardInput) => request<CreditCard>(`/cards/${id}`, { method: "PUT", body: json(d) }),
   deleteCard: (id: string) => request<{ archived: boolean }>(`/cards/${id}`, { method: "DELETE" }),
   restoreCard: (id: string) => request<CreditCard>(`/cards/${id}/reativar`, { method: "POST" }),
+
+  pending: () => request<Pending>("/transactions/pendentes"),
+  confirm: (id: string, d: ConfirmInput) => request<Transaction>(`/transactions/${id}/confirmar`, { method: "POST", body: json(d) }),
+  createTransfer: (d: TransferInput) => request<Transaction>("/transactions/transferencia", { method: "POST", body: json(d) }),
+  updateTransfer: (id: string, d: TransferInput) =>
+    request<Transaction>(`/transactions/transferencia/${id}`, { method: "PUT", body: json(d) }),
+
+  createInstallments: (d: InstallmentInput) => request<{ id: string }>("/installments", { method: "POST", body: json(d) }),
+  deleteInstallments: (planId: string) => request<void>(`/installments/${planId}`, { method: "DELETE" }),
+
+  recurrences: () => request<Recurrence[]>("/recurrences"),
+  createRecurrence: (d: RecurrenceInput) => request<Recurrence>("/recurrences", { method: "POST", body: json(d) }),
+  updateRecurrence: (id: string, d: RecurrenceInput) => request<Recurrence>(`/recurrences/${id}`, { method: "PUT", body: json(d) }),
+  endRecurrence: (id: string) => request<{ ok: true }>(`/recurrences/${id}/encerrar`, { method: "POST" }),
+
+  cardInvoices: (cardId: string) => request<{ card: CreditCard; invoices: InvoiceSummary[] }>(`/invoices/card/${cardId}`),
+  invoice: (id: string) => request<InvoiceDetail>(`/invoices/${id}`),
+  payInvoice: (id: string, d: { accountId: string; amountCents: number; date: string }) =>
+    request<{ paidOff: boolean }>(`/invoices/${id}/pagar`, { method: "POST", body: json(d) }),
 
   summary: (month: string) => request<Summary>(`/summary?month=${month}`),
 };

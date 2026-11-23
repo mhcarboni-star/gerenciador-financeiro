@@ -11,6 +11,9 @@ import { summaryRouter } from "./routes/summary.js";
 import { loansRouter } from "./routes/loans.js";
 import { accountsRouter } from "./routes/accounts.js";
 import { cardsRouter } from "./routes/cards.js";
+import { recurrencesRouter } from "./routes/recurrences.js";
+import { installmentsRouter } from "./routes/installments.js";
+import { invoicesRouter } from "./routes/invoices.js";
 import { requireAuth } from "./lib/auth.js";
 import { errorHandler } from "./lib/http.js";
 
@@ -26,6 +29,9 @@ app.use("/api/summary", requireAuth, summaryRouter);
 app.use("/api/loans", requireAuth, loansRouter);
 app.use("/api/accounts", requireAuth, accountsRouter);
 app.use("/api/cards", requireAuth, cardsRouter);
+app.use("/api/recurrences", requireAuth, recurrencesRouter);
+app.use("/api/installments", requireAuth, installmentsRouter);
+app.use("/api/invoices", requireAuth, invoicesRouter);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Rota não encontrada" }));
 
 // Em produção, a própria API entrega o frontend já compilado.

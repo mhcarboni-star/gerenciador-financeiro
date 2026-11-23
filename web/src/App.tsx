@@ -6,6 +6,8 @@ import { DashboardPage } from "./pages/DashboardPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { CategoriesPage } from "./pages/CategoriesPage";
 import { AccountsPage } from "./pages/AccountsPage";
+import { CardPage } from "./pages/CardPage";
+import { RecurrencesPage } from "./pages/RecurrencesPage";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -27,6 +29,8 @@ export function App() {
         <Route path="/" element={<DashboardPage />} />
         <Route path="/lancamentos" element={<TransactionsPage />} />
         <Route path="/contas" element={<AccountsPage />} />
+        <Route path="/cartoes/:id" element={<CardPage />} />
+        <Route path="/recorrencias" element={<RecurrencesPage />} />
         <Route path="/categorias" element={<CategoriesPage />} />
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />

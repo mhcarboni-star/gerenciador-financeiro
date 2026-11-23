@@ -15,7 +15,9 @@ export class HttpError extends Error {
 
 export function errorHandler(err: unknown, _req: Request, res: Response, _next: NextFunction) {
   if (err instanceof ZodError) {
-    return res.status(400).json({ error: "Dados inválidos", details: err.flatten().fieldErrors });
+    const flat = err.flatten();
+    // Regras que envolvem mais de um campo (refine) vêm em formErrors.
+    return res.status(400).json({ error: flat.formErrors[0] ?? "Dados inválidos", details: flat.fieldErrors });
   }
   if (err instanceof HttpError) {
     return res.status(err.status).json({ error: err.message });

@@ -1,28 +1,39 @@
 import { useState, type FormEvent } from "react";
-import type { Account, Category, CreditCard, Transaction, TransactionInput, TxType } from "../api";
-import { centsToInput, parseMoney, today } from "../format";
+import { api, type Account, type Category, type CreditCard, type Frequency, type Transaction, type TxType } from "../api";
+import { centsToInput, money, parseMoney, today } from "../format";
 
 interface Props {
   categories: Category[];
   accounts: Account[];
   cards: CreditCard[];
   initial?: Transaction;
-  onSubmit: (data: TransactionInput) => Promise<void>;
-  onDelete?: () => Promise<void>;
+  onSaved: () => void;
 }
+
+type Kind = TxType | "TRANSFER";
+type Repeat = "ONCE" | "INSTALLMENTS" | "RECURRING";
 
 /** Categorias do tipo, com as subcategorias logo abaixo da principal. */
 function categoryOptions(categories: Category[], type: TxType) {
   const ofType = categories.filter((c) => c.type === type);
-  const parents = ofType.filter((c) => !c.parentId);
-  return parents.flatMap((p) => [
-    { id: p.id, label: p.name },
-    ...ofType.filter((c) => c.parentId === p.id).map((c) => ({ id: c.id, label: `\u00a0\u00a0\u00a0${c.name}` })),
-  ]);
+  return ofType
+    .filter((c) => !c.parentId)
+    .flatMap((p) => [
+      { id: p.id, label: p.name },
+      ...ofType.filter((c) => c.parentId === p.id).map((c) => ({ id: c.id, label: `   ${c.name}` })),
+    ]);
 }
 
-export function TransactionForm({ categories, accounts, cards, initial, onSubmit, onDelete }: Props) {
-  const [type, setType] = useState<TxType>(initial?.type ?? "EXPENSE");
+const FREQUENCIES: [Frequency, string][] = [
+  ["MONTHLY", "Todo mês"],
+  ["WEEKLY", "Toda semana"],
+  ["YEARLY", "Todo ano"],
+];
+
+export function TransactionForm({ categories, accounts, cards, initial, onSaved }: Props) {
+  const editing = !!initial;
+  const [kind, setKind] = useState<Kind>((initial?.type as Kind) ?? "EXPENSE");
+  const [repeat, setRepeat] = useState<Repeat>("ONCE");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [amount, setAmount] = useState(initial ? centsToInput(initial.amountCents) : "");
   const [date, setDate] = useState(initial?.date.slice(0, 10) ?? today());
@@ -32,126 +43,257 @@ export function TransactionForm({ categories, accounts, cards, initial, onSubmit
   const [source, setSource] = useState(
     initial?.creditCardId ? `c:${initial.creditCardId}` : initial?.accountId ? `a:${initial.accountId}` : accounts[0] ? `a:${accounts[0].id}` : "",
   );
+  const [toAccount, setToAccount] = useState(initial?.destinationAccountId ?? accounts[1]?.id ?? "");
+  const [count, setCount] = useState("2");
+  const [frequency, setFrequency] = useState<Frequency>("MONTHLY");
+  const [endDate, setEndDate] = useState("");
+  const [estimate, setEstimate] = useState(false);
+  const [auto, setAuto] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const options = categoryOptions(categories, type);
+  const type: TxType = kind === "INCOME" ? "INCOME" : "EXPENSE";
+  const accountId = source.startsWith("a:") ? source.slice(2) : null;
+  const creditCardId = source.startsWith("c:") ? source.slice(2) : null;
+  const cents = parseMoney(amount);
+  const n = Number(count);
 
-  async function submit(e: FormEvent) {
-    e.preventDefault();
-    const amountCents = parseMoney(amount);
-    if (!amountCents || amountCents <= 0) return setError("Informe um valor válido, ex.: 45,90");
+  async function run(fn: () => Promise<unknown>) {
     setBusy(true);
     setError("");
     try {
-      await onSubmit({
-        type,
-        description,
-        amountCents,
-        date,
-        categoryId: categoryId || null,
-        notes: notes.trim() || null,
-        accountId: source.startsWith("a:") ? source.slice(2) : null,
-        creditCardId: source.startsWith("c:") ? source.slice(2) : null,
-      });
+      await fn();
+      onSaved();
     } catch (err) {
       setError((err as Error).message);
       setBusy(false);
     }
   }
 
+  function submit(e: FormEvent) {
+    e.preventDefault();
+    if (!cents || cents <= 0) return setError("Informe um valor válido, ex.: 45,90");
+    const base = { description, categoryId: categoryId || null, notes: notes.trim() || null };
+
+    if (kind === "TRANSFER") {
+      if (!accountId) return setError("Escolha a conta de origem");
+      const data = { description: description.trim() || undefined, amountCents: cents, date, accountId, destinationAccountId: toAccount, notes: base.notes };
+      return run(() => (editing ? api.updateTransfer(initial!.id, data) : api.createTransfer(data)));
+    }
+    if (!editing && repeat === "INSTALLMENTS") {
+      if (!Number.isInteger(n) || n < 2) return setError("Informe 2 ou mais parcelas");
+      return run(() => api.createInstallments({ ...base, totalAmountCents: cents, installmentCount: n, firstDate: date, accountId, creditCardId }));
+    }
+    if (!editing && repeat === "RECURRING") {
+      return run(() =>
+        api.createRecurrence({
+          type, description, categoryId: base.categoryId, amountCents: cents, frequency, interval: 1,
+          startDate: date, endDate: endDate || null, accountId, creditCardId, amountIsEstimate: estimate, autoMarkPaid: auto,
+        }),
+      );
+    }
+    const data = { ...base, type, amountCents: cents, date, accountId, creditCardId };
+    return run(() => (editing ? api.updateTransaction(initial!.id, data) : api.createTransaction(data)));
+  }
+
+  const deleteLabel = initial?.recurrenceId && initial.status === "PENDING" ? "Pular esta" : "Excluir";
+
   return (
     <form onSubmit={submit} className="form">
       <div className="segmented" role="radiogroup" aria-label="Tipo">
-        {(["EXPENSE", "INCOME"] as const).map((t) => (
-          <button
-            key={t}
-            type="button"
-            role="radio"
-            aria-checked={type === t}
-            className={type === t ? `active ${t === "INCOME" ? "income" : "expense"}` : ""}
-            onClick={() => {
-              setType(t);
-              setCategoryId("");
-            }}
-          >
-            {t === "INCOME" ? "Receita" : "Despesa"}
-          </button>
-        ))}
+        {(
+          [
+            ["EXPENSE", "Despesa", "expense"],
+            ["INCOME", "Receita", "income"],
+            ["TRANSFER", "Transferência", ""],
+          ] as const
+        )
+          .filter(([k]) => !editing || (kind === "TRANSFER" ? k === "TRANSFER" : k !== "TRANSFER"))
+          .map(([k, label, cls]) => (
+            <button
+              key={k}
+              type="button"
+              role="radio"
+              aria-checked={kind === k}
+              className={kind === k ? `active ${cls}` : ""}
+              onClick={() => {
+                setKind(k);
+                setCategoryId("");
+                if (k === "INCOME" && repeat === "INSTALLMENTS") setRepeat("ONCE");
+                if (k === "TRANSFER" && source.startsWith("c:")) setSource(accounts[0] ? `a:${accounts[0].id}` : "");
+              }}
+            >
+              {label}
+            </button>
+          ))}
       </div>
-      <label>
-        Valor (R$)
-        <input
-          inputMode="decimal"
-          placeholder="0,00"
-          value={amount}
-          onChange={(e) => setAmount(e.target.value)}
-          autoFocus={!initial}
-          required
-        />
-      </label>
-      <label>
-        Descrição
-        <input value={description} onChange={(e) => setDescription(e.target.value)} required maxLength={120} />
-      </label>
-      <div className="row">
+
+      {initial?.installmentPlanId && (
+        <p className="info">Parcela {initial.installmentNumber} de um parcelamento. As outras parcelas não mudam.</p>
+      )}
+      {initial?.recurrenceId && (
+        <p className="info">Ocorrência de um lançamento recorrente. Para mudar as próximas, edite em Lançamentos › Recorrentes.</p>
+      )}
+
+      {kind !== "TRANSFER" && !editing && (
         <label>
-          Data
-          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
-        </label>
-        <label>
-          Categoria
-          <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
-            <option value="">Sem categoria</option>
-            {options.map((c) => (
-              <option key={c.id} value={c.id}>
-                {c.label}
-              </option>
-            ))}
+          Repetição
+          <select value={repeat} onChange={(e) => setRepeat(e.target.value as Repeat)}>
+            <option value="ONCE">Não se repete</option>
+            {kind === "EXPENSE" && <option value="INSTALLMENTS">Parcelado</option>}
+            <option value="RECURRING">Recorrente (todo mês, semana…)</option>
           </select>
         </label>
+      )}
+
+      <div className="row">
+        <label>
+          {repeat === "INSTALLMENTS" && !editing ? "Valor total (R$)" : repeat === "RECURRING" && estimate ? "Valor previsto (R$)" : "Valor (R$)"}
+          <input inputMode="decimal" placeholder="0,00" value={amount} onChange={(e) => setAmount(e.target.value)} autoFocus={!editing} required />
+        </label>
+        {repeat === "INSTALLMENTS" && !editing && (
+          <label className="narrow">
+            Parcelas
+            <input type="number" inputMode="numeric" min={2} max={420} value={count} onChange={(e) => setCount(e.target.value)} required />
+          </label>
+        )}
       </div>
+      {repeat === "INSTALLMENTS" && !editing && cents > 0 && n >= 2 && (
+        <span className="hint">
+          {n}x de {money(Math.floor(cents / n))}
+          {creditCardId ? " · uma parcela em cada fatura" : " · parcelas futuras ficam como previstas"}
+        </span>
+      )}
+
       <label>
-        {type === "EXPENSE" ? "Pago com" : "Recebido em"}
-        <select value={source} onChange={(e) => setSource(e.target.value)} required>
-          {accounts.length > 0 && (
-            <optgroup label="Contas">
-              {accounts.map((a) => (
-                <option key={a.id} value={`a:${a.id}`}>{a.name}</option>
-              ))}
-            </optgroup>
-          )}
-          {cards.length > 0 && (
-            <optgroup label={type === "EXPENSE" ? "Cartões de crédito" : "Estorno no cartão"}>
-              {cards.map((c) => (
-                <option key={c.id} value={`c:${c.id}`}>{c.name}</option>
-              ))}
-            </optgroup>
-          )}
-        </select>
-        {source.startsWith("c:") && <span className="hint">Entra na fatura correspondente à data da compra.</span>}
+        Descrição{kind === "TRANSFER" ? " (opcional)" : ""}
+        <input
+          value={description}
+          onChange={(e) => setDescription(e.target.value)}
+          required={kind !== "TRANSFER"}
+          maxLength={100}
+          placeholder={kind === "TRANSFER" ? "Transferência" : ""}
+        />
       </label>
+
+      {kind === "TRANSFER" ? (
+        <div className="row">
+          <label>
+            De
+            <select value={accountId ?? ""} onChange={(e) => setSource(`a:${e.target.value}`)} required>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+          <label>
+            Para
+            <select value={toAccount} onChange={(e) => setToAccount(e.target.value)} required>
+              <option value="" disabled>Escolha</option>
+              {accounts.map((a) => (
+                <option key={a.id} value={a.id}>{a.name}</option>
+              ))}
+            </select>
+          </label>
+        </div>
+      ) : (
+        <label>
+          {kind === "EXPENSE" ? "Pago com" : "Recebido em"}
+          <select value={source} onChange={(e) => setSource(e.target.value)} required>
+            {accounts.length > 0 && (
+              <optgroup label="Contas">
+                {accounts.map((a) => (
+                  <option key={a.id} value={`a:${a.id}`}>{a.name}</option>
+                ))}
+              </optgroup>
+            )}
+            {cards.length > 0 && (
+              <optgroup label={kind === "EXPENSE" ? "Cartões de crédito" : "Estorno no cartão"}>
+                {cards.map((c) => (
+                  <option key={c.id} value={`c:${c.id}`}>{c.name}</option>
+                ))}
+              </optgroup>
+            )}
+          </select>
+          {creditCardId && repeat === "ONCE" && <span className="hint">Entra na fatura correspondente à data da compra.</span>}
+        </label>
+      )}
+
+      <div className="row">
+        <label>
+          {repeat === "RECURRING" && !editing ? "Primeira data" : repeat === "INSTALLMENTS" && !editing ? "Data da 1ª parcela" : "Data"}
+          <input type="date" value={date} onChange={(e) => setDate(e.target.value)} required />
+        </label>
+        {kind !== "TRANSFER" && (
+          <label>
+            Categoria
+            <select value={categoryId} onChange={(e) => setCategoryId(e.target.value)}>
+              <option value="">Sem categoria</option>
+              {categoryOptions(categories, type).map((c) => (
+                <option key={c.id} value={c.id}>{c.label}</option>
+              ))}
+            </select>
+          </label>
+        )}
+      </div>
+
+      {repeat === "RECURRING" && !editing && (
+        <fieldset className="group">
+          <div className="row">
+            <label>
+              Frequência
+              <select value={frequency} onChange={(e) => setFrequency(e.target.value as Frequency)}>
+                {FREQUENCIES.map(([v, l]) => (
+                  <option key={v} value={v}>{l}</option>
+                ))}
+              </select>
+            </label>
+            <label>
+              Termina em (opcional)
+              <input type="date" value={endDate} min={date} onChange={(e) => setEndDate(e.target.value)} />
+            </label>
+          </div>
+          <label className="check">
+            <input type="checkbox" checked={estimate} onChange={(e) => { setEstimate(e.target.checked); if (e.target.checked) setAuto(false); }} />
+            <span>
+              Valor estimado
+              <span className="hint block">O valor muda todo mês (ex.: energia). No dia, o app pede o valor real.</span>
+            </span>
+          </label>
+          <label className="check">
+            <input type="checkbox" checked={auto} onChange={(e) => { setAuto(e.target.checked); if (e.target.checked) setEstimate(false); }} />
+            <span>
+              Confirmar automaticamente
+              <span className="hint block">Valor fixo cobrado sozinho (ex.: assinatura no cartão, débito automático).</span>
+            </span>
+          </label>
+        </fieldset>
+      )}
+
       <label>
         Observações
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} />
       </label>
       {error && <p className="error">{error}</p>}
       <div className="actions">
-        {onDelete && (
+        {initial?.installmentPlanId && (
           <button
             type="button"
             className="btn danger-ghost"
             disabled={busy}
-            onClick={async () => {
-              if (!confirm("Excluir este lançamento?")) return;
-              setBusy(true);
-              await onDelete().catch((err) => {
-                setError((err as Error).message);
-                setBusy(false);
-              });
-            }}
+            onClick={() => confirm("Excluir TODAS as parcelas deste parcelamento?") && run(() => api.deleteInstallments(initial.installmentPlanId!))}
           >
-            Excluir
+            Excluir parcelamento
+          </button>
+        )}
+        {initial && (
+          <button
+            type="button"
+            className="btn danger-ghost"
+            disabled={busy}
+            onClick={() => confirm(deleteLabel === "Excluir" ? "Excluir este lançamento?" : "Pular esta ocorrência? As próximas continuam.") && run(() => api.deleteTransaction(initial.id))}
+          >
+            {deleteLabel}
           </button>
         )}
         <button className="btn primary" disabled={busy}>
