@@ -1,0 +1,36 @@
+# Avisos das contas do dia: chama o servidor de hora em hora.
+# O servidor decide, para cada pessoa, se já é o horário dela e se ainda não foi avisada hoje.
+# Também "acorda" o servidor do plano gratuito do Render.
+# Segredos do repositório (Settings → Secrets and variables → Actions):
+#   APP_URL    = https://gerenciador-financeiro-p1no.onrender.com
+#   JOB_SECRET = o mesmo valor da variável JOB_SECRET no Render
+name: Avisos do dia
+
+on:
+  schedule:
+    - cron: "17 * * * *" # minuto 17 de cada hora (fora do pico do minuto 0)
+  workflow_dispatch: {}
+
+jobs:
+  hourly:
+    runs-on: ubuntu-latest
+    timeout-minutes: 6
+    steps:
+      - name: Chamar a tarefa de avisos
+        env:
+          APP_URL: ${{ secrets.APP_URL }}
+          JOB_SECRET: ${{ secrets.JOB_SECRET }}
+        run: |
+          if [ -z "$APP_URL" ] || [ -z "$JOB_SECRET" ]; then
+            echo "::warning::Configure os segredos APP_URL e JOB_SECRET do repositório"; exit 0
+          fi
+          # O servidor gratuito pode estar dormindo: até 4 tentativas, esperando ele acordar
+          for i in 1 2 3 4; do
+            code=$(curl -s -o resposta.json -w "%{http_code}" --max-time 90 \
+              -X POST "$APP_URL/api/jobs/hourly" -H "X-Job-Secret: $JOB_SECRET" || echo 000)
+            echo "tentativa $i: HTTP $code"; cat resposta.json 2>/dev/null; echo
+            [ "$code" = "200" ] && exit 0
+            [ "$code" = "401" ] && { echo "::error::JOB_SECRET diferente do Render"; exit 1; }
+            sleep 20
+          done
+          echo "::error::O servidor não respondeu"; exit 1

@@ -272,6 +272,21 @@ export interface MonthPlan {
   uncategorizedSpentCents: number;
 }
 
+export interface AlertSettings {
+  dueItemsEnabled: boolean;
+  includeOverdue: boolean;
+  sendHour: number;
+  timezone: string;
+}
+
+export interface AlertsInfo {
+  enabled: boolean;
+  publicKey: string | null;
+  settings: AlertSettings;
+  notifyThisHousehold: boolean;
+  devices: { id: string; endpoint: string; userAgent: string | null; createdAt: string; lastSuccessAt: string | null }[];
+}
+
 export interface Pending {
   today: string;
   overdue: Transaction[];
@@ -496,6 +511,15 @@ export const api = {
   leaveHousehold: () => request<void>("/household/sair", { method: "POST" }),
   inviteInfo: (token: string) => request<{ householdName: string; invitedBy: string; email: string; expiresAt: string }>(`/convites/${token}`),
   acceptInvite: (token: string) => request<{ householdId: string }>(`/convites/${token}/aceitar`, { method: "POST" }),
+
+  alerts: () => request<AlertsInfo>("/avisos"),
+  subscribePush: (d: { endpoint: string; keys: { p256dh: string; auth: string }; userAgent?: string }) =>
+    request<{ ok: true }>("/avisos/inscricoes", { method: "POST", body: json(d) }),
+  unsubscribePush: (endpoint: string) => request<void>("/avisos/inscricoes", { method: "DELETE", body: json({ endpoint }) }),
+  removeDevice: (id: string) => request<void>(`/avisos/inscricoes/${id}`, { method: "DELETE" }),
+  saveAlertSettings: (d: AlertSettings & { notifyThisHousehold: boolean }) =>
+    request<{ ok: true }>("/avisos/preferencias", { method: "PUT", body: json(d) }),
+  testAlert: () => request<{ reached: number }>("/avisos/teste", { method: "POST" }),
 
   summary: (month: string, scope: Scope = "eu") => request<Summary>(`/summary?month=${month}&escopo=${scope}`),
 };

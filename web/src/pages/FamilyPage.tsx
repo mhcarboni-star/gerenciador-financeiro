@@ -77,7 +77,12 @@ export function FamilyPage() {
       </header>
       {error && <p className="error">{error}</p>}
 
-      <section className="card">
+      <a href="/avisos" className="card alert-link">
+        <span>🔔 Avisos no celular</span>
+        <span className="muted small">Horário, atrasadas, aparelhos ›</span>
+      </a>
+
+      <section className="card spaced">
         <h2>Membros</h2>
         <ul className="tx-list">
           {info.members.map((m) => (

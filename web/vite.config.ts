@@ -7,7 +7,7 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
-      includeAssets: ["icon.svg"],
+      includeAssets: ["icon.svg", "push-sw.js"],
       manifest: {
         name: "Gerenciador Financeiro",
         short_name: "Finanças",
@@ -26,6 +26,8 @@ export default defineConfig({
       workbox: {
         // Nunca guardar respostas da API em cache: os dados precisam estar sempre atualizados.
         navigateFallbackDenylist: [/^\/api\//],
+        // Avisos no celular (push) e toque na notificação
+        importScripts: ["push-sw.js"],
       },
     }),
   ],

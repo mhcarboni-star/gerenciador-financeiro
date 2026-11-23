@@ -9,6 +9,7 @@ import { ScopeTabs } from "../components/ResponsibleSelect";
 import { useTransactionEditor } from "../useTransactionEditor";
 import { useAuth } from "../auth";
 import { useHousehold } from "../household";
+import { currentSubscription, pushSupport } from "../push";
 
 export function DashboardPage() {
   const { user } = useAuth();
@@ -22,6 +23,17 @@ export function DashboardPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
   const [error, setError] = useState("");
   const family = scope === "familia";
+  const [showAlertTip, setShowAlertTip] = useState(false);
+  useEffect(() => {
+    let dismissed = false;
+    try {
+      dismissed = localStorage.getItem("gf_alert_tip") === "off";
+    } catch {
+      /* ignore */
+    }
+    if (dismissed || pushSupport() === "unsupported") return;
+    currentSubscription().then((s) => setShowAlertTip(!s)).catch(() => {});
+  }, []);
 
   const load = useCallback(() => {
     setError("");
@@ -71,6 +83,29 @@ export function DashboardPage() {
       )}
 
       {error && <p className="error">{error}</p>}
+
+      {showAlertTip && (
+        <div className="card alert-tip">
+          <span>🔔 Receba as contas do dia no celular</span>
+          <span className="alert-tip-actions">
+            <Link to="/avisos" className="btn primary">Ativar</Link>
+            <button
+              className="icon-btn"
+              aria-label="Dispensar"
+              onClick={() => {
+                setShowAlertTip(false);
+                try {
+                  localStorage.setItem("gf_alert_tip", "off");
+                } catch {
+                  /* ignore */
+                }
+              }}
+            >
+              ×
+            </button>
+          </span>
+        </div>
+      )}
 
       <PendingPanel data={pending} onConfirm={editor.openConfirm} />
 

@@ -13,6 +13,7 @@ import { LoanPage } from "./pages/LoanPage";
 import { PlanPage } from "./pages/PlanPage";
 import { FamilyPage } from "./pages/FamilyPage";
 import { InvitePage } from "./pages/InvitePage";
+import { AlertsPage } from "./pages/AlertsPage";
 import { HouseholdProvider } from "./household";
 
 export function App() {
@@ -36,6 +37,7 @@ export function App() {
       <Route path="/convite/:token" element={<InvitePage />} />
       <Route element={<Layout />}>
         <Route path="/familia" element={<FamilyPage />} />
+        <Route path="/avisos" element={<AlertsPage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/lancamentos" element={<TransactionsPage />} />
         <Route path="/contas" element={<AccountsPage />} />

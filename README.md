@@ -11,6 +11,7 @@ Aplicação web para controle financeiro pessoal. Funciona no celular e no PC co
 - Resumo do mês: receitas, despesas, saldo do mês e saldo acumulado
 - Gráfico de despesas por categoria
 - Filtro e busca de lançamentos, navegação entre meses
+- **Avisos no celular** das contas do dia e atrasadas, no horário escolhido
 - **Ajuste de saldo** para bater com o extrato; lançamentos com data anterior ao ajuste ficam só registrados
 - Categorias personalizáveis (já vem com um conjunto padrão)
 - Tema claro e escuro automático
@@ -98,6 +99,9 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 | POST/DELETE | `/api/household/convites[/:id]` | Gera / cancela convite (link) |
 | DELETE | `/api/household/membros/:userId` · POST `/api/household/sair` | Remove membro / sair do grupo |
 | GET · POST | `/api/convites/:token` · `/api/convites/:token/aceitar` | Dados do convite / aceitar |
+| GET · PUT | `/api/avisos` · `/api/avisos/preferencias` | Avisos: configuração e aparelhos / preferências |
+| POST/DELETE | `/api/avisos/inscricoes` · POST `/api/avisos/teste` | Inscreve/remove aparelho / envia teste |
+| POST | `/api/jobs/hourly` (cabeçalho `X-Job-Secret`) | Tarefa de hora em hora: recorrências e avisos |
 | GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias |
 | GET/POST/PUT/DELETE | `/api/loans[/:id]` | Empréstimos (cadastro gera parcelas e entrada do dinheiro) |
 | POST | `/api/loans/:id/pagamentos` | Pagamento avulso / antecipação (recalcula as parcelas) |
@@ -109,7 +113,6 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 O banco já suporta os itens abaixo; faltam as telas e rotas da API:
 
 - Metas de economia (objetivos de longo prazo)
-- Avisos no celular das contas do dia (Web Push + tarefa agendada)
 
 Depois:
 

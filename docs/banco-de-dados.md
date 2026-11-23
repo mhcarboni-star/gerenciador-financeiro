@@ -273,13 +273,22 @@ No uso compartilhado, cada membro escolhe por grupo (`HouseholdMember.notifyDueI
 
 **Quem dispara a tarefa.** O plano gratuito do Render "dorme" sem acesso, então um agendador interno não é confiável. A tarefa será chamada de fora por um **workflow agendado do GitHub Actions** (gratuito), que de quebra acorda o servidor. O GitHub pode atrasar execuções agendadas em alguns minutos, o que é aceitável para um aviso diário.
 
-**Variáveis de ambiente** (a configurar quando a API de avisos for implementada):
+**Implementação:**
+- Servidor: `api/src/lib/push.ts` (envio Web Push com chaves VAPID) e `api/src/lib/dueNotifications.ts` (quem avisar, texto do aviso).
+- Rotas: `GET /api/avisos`, `POST/DELETE /api/avisos/inscricoes`, `PUT /api/avisos/preferencias`, `POST /api/avisos/teste` e `POST /api/jobs/hourly` (protegida pelo cabeçalho `X-Job-Secret`).
+- App: tela **Avisos** (`/avisos`) e `web/public/push-sw.js`, carregado pelo service worker, que mostra a notificação e abre o app ao tocar.
+- Agendamento: `.github/workflows/avisos.yml`, no minuto 17 de cada hora. Ele chama a tarefa com até 4 tentativas, o que também acorda o servidor gratuito.
 
-| Variável | Para quê |
-|---|---|
-| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | chaves do Web Push (geradas uma vez com `npx web-push generate-vapid-keys`) |
-| `VAPID_SUBJECT` | `mailto:` de contato exigido pelo protocolo |
-| `JOB_SECRET` | segredo que o workflow envia para chamar a tarefa |
+**Regras do envio:**
+- Avisa quando a hora local já passou do horário escolhido e ainda não houve aviso hoje. Se uma execução atrasar ou falhar, a próxima envia.
+- Não envia depois das 22h.
+- Se nenhum aparelho receber, tenta de novo na hora seguinte.
+- Cada pessoa recebe as contas no nome dela e as da Família (conjunto).
+- Aparelhos que o serviço de push dá como expirados são removidos.
+
+**Variáveis de ambiente (Render):** `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY`, `VAPID_SUBJECT`, `JOB_SECRET`. **Segredos do GitHub** (Settings → Secrets and variables → Actions): `APP_URL` e `JOB_SECRET`, este com o mesmo valor do Render.
+
+> O GitHub desativa fluxos agendados de repositórios sem nenhum commit por 60 dias. Se os avisos pararem depois de um longo período sem mudanças, reative em **Actions → Avisos do dia → Enable workflow**.
 
 ## Regras garantidas pelo banco
 
