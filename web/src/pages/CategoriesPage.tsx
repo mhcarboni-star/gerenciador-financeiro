@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { api, type Category, type TxType } from "../api";
 import { Modal } from "../components/Modal";
-
-const COLORS = ["#16a34a", "#0d9488", "#2563eb", "#7c3aed", "#db2777", "#dc2626", "#ea580c", "#ca8a04", "#64748b"];
+import { ColorPicker } from "../components/ColorPicker";
+import { COLORS } from "../format";
 
 export function CategoriesPage() {
   const [items, setItems] = useState<Category[]>([]);
@@ -36,13 +36,14 @@ export function CategoriesPage() {
             </div>
             <ul className="tx-list">
               {items
-                .filter((c) => c.type === type)
+                .filter((c) => c.type === type && !c.parentId)
+                .flatMap((p) => [p, ...items.filter((c) => c.parentId === p.id)])
                 .map((c) => (
                   <li key={c.id}>
                     <button className="tx" onClick={() => setEditing(c)}>
                       <span className="dot" style={{ background: c.color }} />
                       <span className="tx-main">
-                        <span className="tx-desc">{c.name}</span>
+                        <span className={`tx-desc ${c.parentId ? "sub" : ""}`}>{c.name}</span>
                       </span>
                       <span className="muted small">Editar</span>
                     </button>
@@ -109,20 +110,7 @@ function CategoryModal({
           Nome
           <input value={name} onChange={(e) => setName(e.target.value)} required autoFocus maxLength={40} />
         </label>
-        <fieldset className="colors">
-          <legend>Cor</legend>
-          {COLORS.map((c) => (
-            <button
-              type="button"
-              key={c}
-              className={`swatch ${c === color ? "selected" : ""}`}
-              style={{ background: c }}
-              aria-label={`Cor ${c}`}
-              aria-pressed={c === color}
-              onClick={() => setColor(c)}
-            />
-          ))}
-        </fieldset>
+        <ColorPicker value={color} onChange={setColor} />
         {error && <p className="error">{error}</p>}
         <div className="actions">
           {existing && (

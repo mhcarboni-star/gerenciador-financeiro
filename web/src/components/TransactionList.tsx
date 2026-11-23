@@ -13,6 +13,8 @@ export function TransactionList({ items, onSelect }: { items: Transaction[]; onS
               <span className="tx-desc">{t.description}</span>
               <span className="muted small">
                 {shortDate(t.date)} · {t.category?.name ?? "Sem categoria"}
+                {(t.creditCard ?? t.account) && ` · ${(t.creditCard ?? t.account)!.name}`}
+                {t.status === "PENDING" && " · previsto"}
               </span>
             </span>
             <span className={`tx-amount ${t.type === "INCOME" ? "pos" : "neg"}`}>

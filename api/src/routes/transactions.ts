@@ -4,6 +4,7 @@ import { prisma } from "../lib/prisma.js";
 import { hid, uid, type AuthRequest } from "../lib/auth.js";
 import { ah, HttpError } from "../lib/http.js";
 import { currentMonth, monthRange } from "../lib/dates.js";
+import { getOrCreateInvoice } from "../lib/invoiceStore.js";
 
 export const transactionsRouter = Router();
 
@@ -13,7 +14,9 @@ const schema = z.object({
   type: z.enum(["INCOME", "EXPENSE"]),
   date: z.string().regex(/^\d{4}-\d{2}-\d{2}$/, "Data inválida"),
   categoryId: z.string().nullable().optional(),
-  accountId: z.string().optional(),
+  accountId: z.string().nullable().optional(),
+  creditCardId: z.string().nullable().optional(),
+  status: z.enum(["PAID", "PENDING"]).optional(),
   notes: z.string().trim().max(500).nullable().optional(),
 });
 
@@ -24,23 +27,39 @@ async function checkCategory(req: AuthRequest, categoryId?: string | null) {
 }
 
 async function own(req: AuthRequest, id: string) {
-  const t = await prisma.transaction.findFirst({ where: { id, householdId: hid(req) } });
+  const t = await prisma.transaction.findFirst({ where: { id, householdId: hid(req), type: SIMPLE_TYPES } });
   if (!t) throw new HttpError(404, "Lançamento não encontrado");
 }
 
-/** Conta informada (validada) ou, se omitida, a primeira conta ativa do grupo. */
-async function resolveAccount(req: AuthRequest, accountId?: string) {
+/**
+ * Onde o lançamento acontece: em um cartão (resolve a fatura pela data) ou em uma conta
+ * (a informada ou, se nenhuma, a primeira conta ativa do grupo).
+ */
+async function resolveSource(req: AuthRequest, data: { accountId?: string | null; creditCardId?: string | null; date: string }) {
+  if (data.accountId && data.creditCardId) throw new HttpError(400, "Escolha uma conta ou um cartão, não os dois");
+  if (data.creditCardId) {
+    const card = await prisma.creditCard.findFirst({ where: { id: data.creditCardId, householdId: hid(req) } });
+    if (!card) throw new HttpError(400, "Cartão inválido");
+    const invoice = await getOrCreateInvoice(prisma, card, data.date);
+    if (invoice.status === "PAID") throw new HttpError(400, "A fatura desta data já foi paga");
+    return { accountId: null, creditCardId: card.id, invoiceId: invoice.id };
+  }
   const acc = await prisma.account.findFirst({
-    where: { householdId: hid(req), archivedAt: null, ...(accountId ? { id: accountId } : {}) },
+    where: { householdId: hid(req), ...(data.accountId ? { id: data.accountId } : { archivedAt: null }) },
     orderBy: { createdAt: "asc" },
   });
-  if (!acc) throw new HttpError(400, accountId ? "Conta inválida" : "Cadastre uma conta primeiro");
-  return acc.id;
+  if (!acc) throw new HttpError(400, data.accountId ? "Conta inválida" : "Cadastre uma conta primeiro");
+  return { accountId: acc.id, creditCardId: null, invoiceId: null };
 }
 
-// Por enquanto esta rota trata só receitas e despesas em conta; cartão,
-// transferências e parcelas ganham rotas próprias.
+// Esta rota trata receitas e despesas (em conta ou cartão). Transferências, parcelas,
+// recorrências e empréstimos têm fluxos próprios.
 const SIMPLE_TYPES = { in: ["INCOME", "EXPENSE"] as ("INCOME" | "EXPENSE")[] };
+const INCLUDE = {
+  category: true,
+  account: { select: { id: true, name: true, color: true } },
+  creditCard: { select: { id: true, name: true, color: true } },
+} as const;
 
 const toDate = (s: string) => new Date(`${s}T00:00:00Z`);
 
@@ -50,7 +69,7 @@ transactionsRouter.get(
     const month = typeof req.query.month === "string" ? req.query.month : currentMonth();
     const list = await prisma.transaction.findMany({
       where: { householdId: hid(req), type: SIMPLE_TYPES, date: monthRange(month) },
-      include: { category: true },
+      include: INCLUDE,
       orderBy: [{ date: "desc" }, { createdAt: "desc" }],
     });
     res.json(list);
@@ -62,10 +81,10 @@ transactionsRouter.post(
   ah(async (req: AuthRequest, res) => {
     const data = schema.parse(req.body);
     await checkCategory(req, data.categoryId);
-    const accountId = await resolveAccount(req, data.accountId);
+    const source = await resolveSource(req, data);
     const t = await prisma.transaction.create({
-      data: { ...data, accountId, date: toDate(data.date), householdId: hid(req), createdById: uid(req) },
-      include: { category: true },
+      data: { ...data, ...source, date: toDate(data.date), householdId: hid(req), createdById: uid(req) },
+      include: INCLUDE,
     });
     res.status(201).json(t);
   }),
@@ -78,11 +97,11 @@ transactionsRouter.put(
     await own(req, id);
     const data = schema.parse(req.body);
     await checkCategory(req, data.categoryId);
-    const accountId = data.accountId ? await resolveAccount(req, data.accountId) : undefined;
+    const source = await resolveSource(req, data);
     const t = await prisma.transaction.update({
       where: { id },
-      data: { ...data, accountId, date: toDate(data.date) },
-      include: { category: true },
+      data: { ...data, ...source, date: toDate(data.date) },
+      include: INCLUDE,
     });
     res.json(t);
   }),

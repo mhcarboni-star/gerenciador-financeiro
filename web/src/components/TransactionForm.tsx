@@ -1,25 +1,41 @@
 import { useState, type FormEvent } from "react";
-import type { Category, Transaction, TransactionInput, TxType } from "../api";
+import type { Account, Category, CreditCard, Transaction, TransactionInput, TxType } from "../api";
 import { centsToInput, parseMoney, today } from "../format";
 
 interface Props {
   categories: Category[];
+  accounts: Account[];
+  cards: CreditCard[];
   initial?: Transaction;
   onSubmit: (data: TransactionInput) => Promise<void>;
   onDelete?: () => Promise<void>;
 }
 
-export function TransactionForm({ categories, initial, onSubmit, onDelete }: Props) {
+/** Categorias do tipo, com as subcategorias logo abaixo da principal. */
+function categoryOptions(categories: Category[], type: TxType) {
+  const ofType = categories.filter((c) => c.type === type);
+  const parents = ofType.filter((c) => !c.parentId);
+  return parents.flatMap((p) => [
+    { id: p.id, label: p.name },
+    ...ofType.filter((c) => c.parentId === p.id).map((c) => ({ id: c.id, label: `\u00a0\u00a0\u00a0${c.name}` })),
+  ]);
+}
+
+export function TransactionForm({ categories, accounts, cards, initial, onSubmit, onDelete }: Props) {
   const [type, setType] = useState<TxType>(initial?.type ?? "EXPENSE");
   const [description, setDescription] = useState(initial?.description ?? "");
   const [amount, setAmount] = useState(initial ? centsToInput(initial.amountCents) : "");
   const [date, setDate] = useState(initial?.date.slice(0, 10) ?? today());
   const [categoryId, setCategoryId] = useState(initial?.categoryId ?? "");
   const [notes, setNotes] = useState(initial?.notes ?? "");
+  // "a:<id>" = conta, "c:<id>" = cartão
+  const [source, setSource] = useState(
+    initial?.creditCardId ? `c:${initial.creditCardId}` : initial?.accountId ? `a:${initial.accountId}` : accounts[0] ? `a:${accounts[0].id}` : "",
+  );
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
-  const options = categories.filter((c) => c.type === type);
+  const options = categoryOptions(categories, type);
 
   async function submit(e: FormEvent) {
     e.preventDefault();
@@ -35,6 +51,8 @@ export function TransactionForm({ categories, initial, onSubmit, onDelete }: Pro
         date,
         categoryId: categoryId || null,
         notes: notes.trim() || null,
+        accountId: source.startsWith("a:") ? source.slice(2) : null,
+        creditCardId: source.startsWith("c:") ? source.slice(2) : null,
       });
     } catch (err) {
       setError((err as Error).message);
@@ -87,12 +105,32 @@ export function TransactionForm({ categories, initial, onSubmit, onDelete }: Pro
             <option value="">Sem categoria</option>
             {options.map((c) => (
               <option key={c.id} value={c.id}>
-                {c.name}
+                {c.label}
               </option>
             ))}
           </select>
         </label>
       </div>
+      <label>
+        {type === "EXPENSE" ? "Pago com" : "Recebido em"}
+        <select value={source} onChange={(e) => setSource(e.target.value)} required>
+          {accounts.length > 0 && (
+            <optgroup label="Contas">
+              {accounts.map((a) => (
+                <option key={a.id} value={`a:${a.id}`}>{a.name}</option>
+              ))}
+            </optgroup>
+          )}
+          {cards.length > 0 && (
+            <optgroup label={type === "EXPENSE" ? "Cartões de crédito" : "Estorno no cartão"}>
+              {cards.map((c) => (
+                <option key={c.id} value={`c:${c.id}`}>{c.name}</option>
+              ))}
+            </optgroup>
+          )}
+        </select>
+        {source.startsWith("c:") && <span className="hint">Entra na fatura correspondente à data da compra.</span>}
+      </label>
       <label>
         Observações
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} />

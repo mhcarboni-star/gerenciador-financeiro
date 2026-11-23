@@ -11,7 +11,51 @@ export interface Category {
   name: string;
   type: TxType;
   color: string;
+  parentId: string | null;
 }
+
+export type AccountType = "CHECKING" | "SAVINGS" | "CASH" | "INVESTMENT" | "OTHER";
+
+export interface Account {
+  id: string;
+  name: string;
+  type: AccountType;
+  institution: string | null;
+  initialBalanceCents: number;
+  color: string;
+  includeInTotals: boolean;
+  archivedAt: string | null;
+  balanceCents: number;
+  projectedBalanceCents: number;
+}
+
+export type AccountInput = Pick<Account, "name" | "type" | "institution" | "initialBalanceCents" | "color" | "includeInTotals">;
+
+export interface CreditCard {
+  id: string;
+  name: string;
+  brand: string | null;
+  limitCents: number;
+  closingDay: number;
+  dueDay: number;
+  paymentAccountId: string | null;
+  color: string;
+  archivedAt: string | null;
+  usedCents: number;
+  availableCents: number;
+  currentInvoice: {
+    id: string | null;
+    referenceMonth: string;
+    closingDate: string;
+    dueDate: string;
+    totalCents: number;
+    projectedTotalCents: number;
+  };
+}
+
+export type CardInput = Pick<CreditCard, "name" | "brand" | "limitCents" | "closingDay" | "dueDay" | "paymentAccountId" | "color">;
+
+type SourceRef = { id: string; name: string; color: string } | null;
 
 export interface Transaction {
   id: string;
@@ -22,6 +66,11 @@ export interface Transaction {
   notes: string | null;
   categoryId: string | null;
   category: Category | null;
+  status: "PAID" | "PENDING";
+  accountId: string | null;
+  creditCardId: string | null;
+  account: SourceRef;
+  creditCard: SourceRef;
 }
 
 export interface TransactionInput {
@@ -31,6 +80,8 @@ export interface TransactionInput {
   date: string;
   categoryId: string | null;
   notes: string | null;
+  accountId: string | null;
+  creditCardId: string | null;
 }
 
 export interface Summary {
@@ -90,7 +141,7 @@ export const api = {
   me: () => request<User>("/auth/me"),
 
   categories: () => request<Category[]>("/categories"),
-  createCategory: (d: Omit<Category, "id">) =>
+  createCategory: (d: Omit<Category, "id" | "parentId"> & { parentId?: string | null }) =>
     request<Category>("/categories", { method: "POST", body: json(d) }),
   updateCategory: (id: string, d: Partial<Omit<Category, "id">>) =>
     request<Category>(`/categories/${id}`, { method: "PUT", body: json(d) }),
@@ -102,6 +153,18 @@ export const api = {
   updateTransaction: (id: string, d: TransactionInput) =>
     request<Transaction>(`/transactions/${id}`, { method: "PUT", body: json(d) }),
   deleteTransaction: (id: string) => request<void>(`/transactions/${id}`, { method: "DELETE" }),
+
+  accounts: (archived = false) => request<Account[]>(`/accounts${archived ? "?arquivadas=1" : ""}`),
+  createAccount: (d: AccountInput) => request<Account>("/accounts", { method: "POST", body: json(d) }),
+  updateAccount: (id: string, d: AccountInput) => request<Account>(`/accounts/${id}`, { method: "PUT", body: json(d) }),
+  deleteAccount: (id: string) => request<{ archived: boolean }>(`/accounts/${id}`, { method: "DELETE" }),
+  restoreAccount: (id: string) => request<Account>(`/accounts/${id}/reativar`, { method: "POST" }),
+
+  cards: (archived = false) => request<CreditCard[]>(`/cards${archived ? "?arquivados=1" : ""}`),
+  createCard: (d: CardInput) => request<CreditCard>("/cards", { method: "POST", body: json(d) }),
+  updateCard: (id: string, d: CardInput) => request<CreditCard>(`/cards/${id}`, { method: "PUT", body: json(d) }),
+  deleteCard: (id: string) => request<{ archived: boolean }>(`/cards/${id}`, { method: "DELETE" }),
+  restoreCard: (id: string) => request<CreditCard>(`/cards/${id}/reativar`, { method: "POST" }),
 
   summary: (month: string) => request<Summary>(`/summary?month=${month}`),
 };
