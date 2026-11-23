@@ -76,6 +76,8 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 | GET    | `/api/transactions?month=...`  | Lançamentos do mês                |
 | POST/PUT/DELETE | `/api/transactions[/:id]` | Cria, edita, exclui lançamento |
 | GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias                  |
+| GET    | `/api/loans`                   | Empréstimos com saldo devedor e extrato |
+| GET    | `/api/loans/relatorio.pdf`     | Relatório de empréstimos em PDF   |
 
 ## Próximos passos sugeridos
 

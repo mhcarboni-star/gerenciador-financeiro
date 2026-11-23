@@ -76,7 +76,7 @@ erDiagram
 | `TRANSFER` | conta → conta | `accountId` (origem) + `destinationAccountId` | não |
 | `INVOICE_PAYMENT` | paga fatura | `accountId` + `invoiceId` | não (as compras já contaram) |
 | `LOAN_RECEIPT` | dinheiro do empréstimo entrando na conta | `accountId` + `loanId` | não (é dívida, não receita) |
-| `LOAN_PAYMENT` | pagamento de empréstimo | `accountId` + `loanId`; divisão em `loanPrincipalCents` + `loanInterestCents` | não; aparece à parte como "Empréstimos" (os juros pagos ficam visíveis) |
+| `LOAN_PAYMENT` | pagamento de empréstimo | `accountId` + `loanId`; divisão em `loanPrincipalCents` + `loanInterestCents` | **sim, a parcela inteira**, como despesa na categoria "Empréstimos" do resumo |
 
 - `status`: `PENDING` (previsto / a pagar) ou `PAID` (efetivado). Contas a pagar são despesas `PENDING` com `date` = vencimento.
 - Compras no cartão contam como despesa **na data da compra**; o dinheiro sai da conta só no `INVOICE_PAYMENT`.
@@ -157,6 +157,16 @@ A view `loan_balances` mostra, por empréstimo:
 | `nextDueDate` / `lastPaymentDate` | próximo vencimento e último pagamento |
 
 **Saldo devedor hoje** = `principalOutstandingCents` + `accruedInterestCents`. É o valor aproximado para quitar hoje; o valor exato de quitação é informado pelo credor.
+
+### Relatório em PDF
+
+`GET /api/loans/relatorio.pdf` (opcional `?ativos=1` para só os em aberto) gera um PDF com:
+
+1. **Resumo geral:** empréstimos em aberto, saldo devedor total, parcelas a pagar, total emprestado, total pago e juros pagos.
+2. **Tabela-resumo:** uma linha por empréstimo, com valor, pago, juros, saldo devedor e parcelas.
+3. **Uma página por empréstimo:** dados do contrato, saldo devedor hoje (principal + juros acumulados) e **extrato** com cada pagamento (pago ou previsto), mostrando data, valor, juros, amortização e saldo após.
+
+`GET /api/loans` devolve os mesmos dados em JSON (usado pela aba de empréstimos).
 
 Os cálculos (tabela Price, divisão de cada pagamento, recálculo após antecipação, juros pró-rata) ficam em [`api/src/lib/loans.ts`](../api/src/lib/loans.ts), com testes em `api/test/loans.test.ts` (`npm test --workspace api`).
 
