@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { hid, uid, type AuthRequest } from "../lib/auth.js";
 import { ah, HttpError } from "../lib/http.js";
-import { monthRange } from "../lib/dates.js";
+import { monthEnd, monthRange } from "../lib/dates.js";
 import { commitmentKind, computePlan, type PlanItem } from "../lib/plan.js";
 import { generateForHousehold } from "../lib/recurrenceService.js";
 import { todayIso } from "../lib/schedule.js";
@@ -65,7 +65,7 @@ planRouter.get(
     const me = uid(req);
     const month = monthParam.parse(req.query.month);
     const scope = scopeParam.parse(req.query.escopo);
-    await generateForHousehold(householdId);
+    await generateForHousehold(householdId, monthEnd(month));
     const today = todayIso();
     const [allItems, plans, budgets, categories, prevCount, members] = await Promise.all([
       loadItems(householdId, month),

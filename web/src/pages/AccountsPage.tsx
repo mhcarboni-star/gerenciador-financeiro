@@ -55,11 +55,11 @@ export function AccountsPage() {
 
       <section className="stats stats-3">
         <div className="card stat">
-          <span className="muted small">Saldo em contas</span>
+          <span className="muted small">Saldo em contas hoje</span>
           <strong className={total < 0 ? "neg" : ""}>{money(total)}</strong>
         </div>
         <div className="card stat">
-          <span className="muted small">Saldo previsto</span>
+          <span className="muted small">Previsto em 31/12</span>
           <strong className={projected < 0 ? "neg" : ""}>{money(projected)}</strong>
         </div>
         <div className="card stat">
@@ -87,7 +87,7 @@ export function AccountsPage() {
             </span>
             <strong className={`tile-value ${a.balanceCents < 0 ? "neg" : ""}`}>{money(a.balanceCents)}</strong>
             {a.projectedBalanceCents !== a.balanceCents && (
-              <span className="muted small">Previsto: {money(a.projectedBalanceCents)}</span>
+              <span className="muted small">Previsto em 31/12: {money(a.projectedBalanceCents)}</span>
             )}
             {a.lastAdjustment && <span className="muted small">Saldo ajustado em {shortDate(a.lastAdjustment.date)}</span>}
           </button>

@@ -3,7 +3,7 @@ import { z } from "zod";
 import { prisma } from "../lib/prisma.js";
 import { hid, uid, type AuthRequest } from "../lib/auth.js";
 import { ah, HttpError } from "../lib/http.js";
-import { currentMonth, monthRange } from "../lib/dates.js";
+import { currentMonth, monthEnd, monthRange } from "../lib/dates.js";
 import { getOrCreateInvoice } from "../lib/invoiceStore.js";
 import { refreshInvoiceStatus } from "../lib/invoiceStatus.js";
 import { generateForHousehold } from "../lib/recurrenceService.js";
@@ -92,8 +92,9 @@ async function resolveSource(req: AuthRequest, data: { accountId?: string | null
 transactionsRouter.get(
   "/",
   ah(async (req: AuthRequest, res) => {
-    await generateForHousehold(hid(req));
     const month = typeof req.query.month === "string" ? req.query.month : currentMonth();
+    monthRange(month); // valida o formato antes de gerar
+    await generateForHousehold(hid(req), monthEnd(month));
     const [list, checkpoints] = await Promise.all([
       prisma.transaction.findMany({
         where: { householdId: hid(req), type: { not: "LOAN_RECEIPT" }, date: monthRange(month) },

@@ -3,8 +3,22 @@ import { prisma } from "./prisma.js";
 import { getOrCreateInvoice } from "./invoiceStore.js";
 import { addDays, addMonths, firstOnOrAfter, occurrencesBetween, todayIso } from "./schedule.js";
 
-/** Quantos meses à frente as ocorrências ficam geradas. */
-export const HORIZON_MONTHS = 3;
+/**
+ * Até onde as ocorrências ficam geradas. Recorrência sem data final continua para sempre:
+ * o app sempre mantém gerado até o fim do ano corrente (no mínimo 3 meses à frente) e,
+ * quando alguém abre um mês mais adiante, gera até o fim daquele mês (limite: 5 anos).
+ */
+export function horizonFor(until?: string) {
+  const today = todayIso();
+  const endOfYear = `${today.slice(0, 4)}-12-31`;
+  const min3 = addMonths(today, 3);
+  let h = min3 > endOfYear ? min3 : endOfYear;
+  if (until && until > h) {
+    const max = addMonths(today, 60);
+    h = until < max ? until : max;
+  }
+  return h;
+}
 
 const iso = (d: Date) => d.toISOString().slice(0, 10);
 const d = (s: string) => new Date(`${s}T00:00:00Z`);
@@ -15,8 +29,8 @@ const isUnique = (e: unknown) => e instanceof Prisma.PrismaClientKnownRequestErr
  * Trava a linha da recorrência para duas execuções simultâneas não gerarem em dobro
  * (o índice único (recurrenceId, occurrenceDate) é a segunda proteção).
  */
-export async function generateOccurrences(recurrenceId: string) {
-  const horizon = addMonths(todayIso(), HORIZON_MONTHS);
+export async function generateOccurrences(recurrenceId: string, until?: string) {
+  const horizon = horizonFor(until);
   return prisma.$transaction(async (tx) => {
     const [rec] = await tx.$queryRaw<Recurrence[]>`SELECT * FROM "Recurrence" WHERE id = ${recurrenceId} FOR UPDATE`;
     if (!rec || !rec.active) return 0;
@@ -67,13 +81,14 @@ export async function generateOccurrences(recurrenceId: string) {
 }
 
 /** Gera o que estiver faltando para todas as recorrências ativas do grupo. */
-export async function generateForHousehold(householdId: string) {
-  const horizon = d(addMonths(todayIso(), HORIZON_MONTHS));
+export async function generateForHousehold(householdId: string, until?: string) {
+  const horizonIso = horizonFor(until);
+  const horizon = d(horizonIso);
   const due = await prisma.recurrence.findMany({
     where: { householdId, active: true, nextDate: { lte: horizon } },
     select: { id: true },
   });
-  for (const r of due) await generateOccurrences(r.id);
+  for (const r of due) await generateOccurrences(r.id, horizonIso);
 }
 
 /**

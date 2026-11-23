@@ -91,7 +91,7 @@ erDiagram
 
 Uma recorrência (aluguel, salário, energia, assinatura) pode sair de uma **conta** ou de um **cartão de crédito**.
 
-**1. Geração.** A API cria as próximas ocorrências (ex.: 3 meses à frente) como lançamentos `PENDING`:
+**1. Geração.** Recorrência sem data final continua **indefinidamente**. O app mantém as ocorrências geradas pelo menos até **31/12 do ano corrente** (e no mínimo 3 meses à frente). Quando alguém abre um mês mais adiante (Lançamentos, Resumo, Planejar), gera na hora até o fim daquele mês, com limite técnico de 5 anos à frente. As ocorrências nascem como lançamentos `PENDING`:
 
 | Campo | Valor na geração |
 |---|---|
@@ -321,7 +321,7 @@ psql "$DIRECT_URL" -f api/prisma/tests/integridade.sql
 
 | View | Para quê |
 |---|---|
-| `account_balances` | `balanceCents` (só efetivados) e `projectedBalanceCents` (inclui pendentes) de cada conta |
+| `account_balances` | `balanceCents`: efetivados com data **até hoje** (fuso de Brasília) · `projectedBalanceCents`: saldo em **31/12 do ano corrente**, incluindo os previstos |
 | `invoice_totals` | `totalCents` (compras confirmadas − estornos), `projectedTotalCents` (inclui previstas) e `paidCents` de cada fatura |
 | `recurrence_variance` | previsto × realizado de cada ocorrência de recorrência confirmada |
 | `loan_balances` | situação e saldo devedor de cada empréstimo (ver seção Empréstimos) |

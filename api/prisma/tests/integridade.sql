@@ -139,7 +139,7 @@ UPDATE "Transaction" SET "paidAt" = '2026-12-31 15:00' WHERE id = 'same1';
 -- Data posterior: conta
 INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","updatedAt") VALUES ('new1','h1','INCOME','Pix recebido',20000,'2027-01-02','acc1',now());
 SELECT account_balance_on('acc1','2027-01-31',false) = 1000000 - 1500 + 20000 AS posteriores_contam;
-SELECT b."balanceCents" = account_balance_on('acc1','infinity',false) AS view_usa_a_regra FROM account_balances b WHERE b."accountId" = 'acc1';
+SELECT b."balanceCents" = account_balance_on('acc1',(now() AT TIME ZONE 'America/Sao_Paulo')::date,false) AS view_usa_a_regra FROM account_balances b WHERE b."accountId" = 'acc1';
 -- Pendente criado ANTES do ajuste e confirmado DEPOIS (mesmo dia) conta no saldo
 INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents",date,"accountId","createdAt","updatedAt") VALUES ('pend1','h1','EXPENSE','PENDING','Conta de água',8000,'2026-12-31','acc1','2026-12-30 08:00',now());
 -- (inclui também a conta de luz t5, pendente desde 28/11: pendente nunca fica congelada pelo ajuste)

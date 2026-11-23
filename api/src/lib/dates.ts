@@ -13,3 +13,9 @@ export function monthRange(month: string) {
 export function currentMonth() {
   return new Date().toISOString().slice(0, 7);
 }
+
+/** Último dia de um mês "YYYY-MM". */
+export function monthEnd(month: string) {
+  const [y, m] = month.split("-").map(Number);
+  return new Date(Date.UTC(y, m, 0)).toISOString().slice(0, 10);
+}

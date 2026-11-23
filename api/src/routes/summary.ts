@@ -2,7 +2,8 @@ import { Router } from "express";
 import { prisma } from "../lib/prisma.js";
 import { hid, type AuthRequest } from "../lib/auth.js";
 import { ah } from "../lib/http.js";
-import { currentMonth, monthRange } from "../lib/dates.js";
+import { currentMonth, monthEnd, monthRange } from "../lib/dates.js";
+import { generateForHousehold } from "../lib/recurrenceService.js";
 import { uid } from "../lib/auth.js";
 import { membersOf } from "../lib/members.js";
 
@@ -22,6 +23,7 @@ summaryRouter.get(
     const householdId = hid(req);
     const month = typeof req.query.month === "string" ? req.query.month : currentMonth();
     const range = monthRange(month);
+    await generateForHousehold(householdId, monthEnd(month));
     const family = req.query.escopo === "familia";
     const who = family ? {} : { responsibleId: uid(req) };
 
@@ -34,7 +36,7 @@ summaryRouter.get(
       prisma.category.findMany({ where: { householdId } }),
       // Saldo real das contas no último dia do mês (respeita os ajustes de saldo).
       prisma.$queryRaw<{ total: bigint | null }[]>`
-        SELECT SUM(account_balance_on(a.id, (${range.lt}::date - 1), false)) AS total
+        SELECT SUM(account_balance_on(a.id, LEAST(${range.lt}::date - 1, (now() AT TIME ZONE 'America/Sao_Paulo')::date), false)) AS total
         FROM "Account" a
         WHERE a."householdId" = ${householdId} AND a."includeInTotals"`,
       family
