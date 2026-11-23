@@ -96,7 +96,7 @@ Se a recorrência tiver `autoMarkPaid` (valor fixo, débito automático), a ocor
 
 - corrigir o **valor** → muda `amountCents`; `expectedAmountCents` fica com a previsão original;
 - corrigir a **data** → muda `date` (no cartão, a fatura é recalculada); `occurrenceDate` continua com a data programada, o que mantém a sequência da recorrência intacta;
-- opcionalmente, **usar o valor real como nova previsão** → a API atualiza `Recurrence.amountCents` e as ocorrências futuras ainda pendentes.
+- opcionalmente, **usar o valor real como nova previsão** → a API atualiza `Recurrence.amountCents` e as ocorrências futuras ainda pendentes Essa opção vem **desmarcada** por padrão, em todos os tipos de recorrência.
 
 Status passa para `PAID`.
 
