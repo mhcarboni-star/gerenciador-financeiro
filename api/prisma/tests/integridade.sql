@@ -71,6 +71,24 @@ SELECT pg_temp.expect_fail('ocorrência sem data programada', $q$INSERT INTO "Tr
 SELECT pg_temp.expect_fail('mesma ocorrência gerada duas vezes', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"occurrenceDate","accountId","recurrenceId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-30','2026-11-25','acc1','recLuz',now())$q$);
 SELECT pg_temp.expect_fail('recorrência no cartão e na conta ao mesmo tempo', $q$INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","startDate","nextDate","accountId","creditCardId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-01','2026-11-01','acc1','cc1',now())$q$);
 
+
+-- ── Notificações ──
+INSERT INTO "PushSubscription"(id,"userId",endpoint,p256dh,auth) VALUES ('ps1','u1','https://push.example/abc','k','a');
+INSERT INTO "NotificationSettings"("userId","updatedAt") VALUES ('u1',now());
+UPDATE "HouseholdMember" SET "notifyDueItems" = false WHERE "userId" = 'u2';
+-- Em 28/11: a conta de luz t5 (pendente, vence 28/11) aparece para Ana; Beto desligou os avisos do grupo
+SELECT count(*) = 1 AND bool_and(description = 'Conta de luz' AND NOT overdue) AS aviso_ana_ok FROM due_items_for_user('u1','2026-11-28');
+SELECT count(*) = 0 AS aviso_beto_desligado_ok FROM due_items_for_user('u2','2026-11-28');
+-- No dia seguinte, ela vira "atrasada"
+SELECT bool_and(overdue) AS atrasado_ok FROM due_items_for_user('u1','2026-11-29');
+INSERT INTO "NotificationLog"(id,"userId",kind,"referenceDate","transactionCount","devicesReached") VALUES ('nl1','u1','DUE_ITEMS','2026-11-28',1,1);
+
+SELECT pg_temp.expect_fail('aviso duplicado no mesmo dia', $q$INSERT INTO "NotificationLog"(id,"userId",kind,"referenceDate","transactionCount","devicesReached") VALUES ('x','u1','DUE_ITEMS','2026-11-28',1,1)$q$);
+SELECT pg_temp.expect_fail('hora do aviso 24', $q$UPDATE "NotificationSettings" SET "sendHour" = 24 WHERE "userId" = 'u1'$q$);
+SELECT pg_temp.expect_fail('fuso horário inválido', $q$UPDATE "NotificationSettings" SET timezone = 'São Paulo; DROP' WHERE "userId" = 'u1'$q$);
+SELECT pg_temp.expect_fail('aparelho com endpoint sem https', $q$INSERT INTO "PushSubscription"(id,"userId",endpoint,p256dh,auth) VALUES ('x','u1','http://inseguro','k','a')$q$);
+SELECT pg_temp.expect_fail('aparelho duplicado', $q$INSERT INTO "PushSubscription"(id,"userId",endpoint,p256dh,auth) VALUES ('x','u2','https://push.example/abc','k','a')$q$);
+
 SELECT a.name, b."balanceCents", b."projectedBalanceCents" FROM account_balances b JOIN "Account" a ON a.id=b."accountId" ORDER BY 1;
 SELECT "invoiceId","totalCents","projectedTotalCents","paidCents" FROM invoice_totals;
 ROLLBACK;

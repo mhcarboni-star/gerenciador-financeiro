@@ -51,7 +51,7 @@ erDiagram
 |---|---|---|
 | `User` | login | `email` (único), `passwordHash` |
 | `Household` | grupo financeiro (casa, casal, pessoal) | `name`, `currency` |
-| `HouseholdMember` | quem participa de qual grupo | `role`: `OWNER` / `MEMBER` |
+| `HouseholdMember` | quem participa de qual grupo | `role`: `OWNER` / `MEMBER`, `notifyDueItems` |
 | `HouseholdInvite` | convite por e-mail | `token` (único), `expiresAt`, `acceptedAt` |
 | `Account` | corrente, poupança, carteira, investimento | `initialBalanceCents`, `includeInTotals`, `ownerId` (null = conjunta) |
 | `CreditCard` | cartão | `limitCents`, `closingDay`, `dueDay`, `paymentAccountId`, `holderId` |
@@ -62,6 +62,9 @@ erDiagram
 | `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
 | `Budget` | limite mensal por categoria | `month` (dia 1), `limitCents` |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
+| `PushSubscription` | aparelho que recebe aviso (Web Push) | `endpoint` (único), `p256dh`, `auth`, `failureCount` |
+| `NotificationSettings` | preferências de aviso do usuário | `dueItemsEnabled`, `includeOverdue`, `sendHour`, `timezone` |
+| `NotificationLog` | avisos enviados | único por `(userId, kind, referenceDate)` |
 
 ### Lançamentos (`Transaction`)
 
@@ -115,6 +118,41 @@ Efeito nos saldos:
 - **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
 - **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
 
+## Avisos no celular: contas do dia
+
+O app avisa no celular (e no PC, se ativado) as contas e os recebimentos **previstos para hoje**, e os **atrasados**: lançamentos `PENDING` com `date <= hoje`.
+
+**Ativação.** Na tela de configurações, o usuário toca em "Ativar avisos". O navegador pede permissão, e a inscrição é gravada em `PushSubscription`, uma por aparelho.
+- **Android:** funciona no Chrome, mesmo sem instalar.
+- **iPhone:** exige iOS 16.4+ e o app **adicionado à tela inicial**.
+
+**Preferências** (`NotificationSettings`; se não existir, valem os padrões):
+
+| Campo | Padrão | Significado |
+|---|---|---|
+| `dueItemsEnabled` | ligado | recebe o aviso diário |
+| `includeOverdue` | ligado | inclui atrasados |
+| `sendHour` | 8 | hora local do aviso |
+| `timezone` | America/Sao_Paulo | fuso do usuário |
+
+No uso compartilhado, cada membro escolhe por grupo (`HouseholdMember.notifyDueItems`).
+
+**Envio.** Uma tarefa roda **a cada hora** (`POST /api/jobs/hourly`, protegida por um segredo) e faz:
+1. Gera as próximas ocorrências das recorrências.
+2. Para cada usuário em que agora é `sendHour` no seu fuso e que ainda não tem `NotificationLog` de hoje, busca os itens com `due_items_for_user(userId, hoje)`.
+3. Se houver itens, envia **um único aviso** por aparelho, por exemplo: *"3 contas para hoje · R$ 412,30 — Energia, Internet, Netflix"* e *"1 atrasada"*. Tocar no aviso abre a lista para confirmar.
+4. Grava `NotificationLog`. A unicidade impede avisar duas vezes, mesmo que a tarefa rode de novo. Aparelhos cuja inscrição expirou (o serviço responde 404/410) são removidos.
+
+**Quem dispara a tarefa.** O plano gratuito do Render "dorme" sem acesso, então um agendador interno não é confiável. A tarefa será chamada de fora por um **workflow agendado do GitHub Actions** (gratuito), que de quebra acorda o servidor. O GitHub pode atrasar execuções agendadas em alguns minutos, o que é aceitável para um aviso diário.
+
+**Variáveis de ambiente** (a configurar quando a API de avisos for implementada):
+
+| Variável | Para quê |
+|---|---|
+| `VAPID_PUBLIC_KEY`, `VAPID_PRIVATE_KEY` | chaves do Web Push (geradas uma vez com `npx web-push generate-vapid-keys`) |
+| `VAPID_SUBJECT` | `mailto:` de contato exigido pelo protocolo |
+| `JOB_SECRET` | segredo que o workflow envia para chamar a tarefa |
+
 ## Regras garantidas pelo banco
 
 | Regra | Onde |
@@ -129,6 +167,8 @@ Efeito nos saldos:
 | Um convite pendente por e-mail por grupo | índice único parcial |
 | Ocorrência de recorrência sempre com data programada; mesma ocorrência não gerada duas vezes | `CHECK` + índice único `(recurrenceId, occurrenceDate)` |
 | Recorrência de valor estimado não pode ser gerada já como paga | `CHECK` |
+| No máximo um aviso por usuário, tipo e dia; aparelho não duplicado | índices únicos |
+| Hora do aviso entre 0 e 23, fuso em formato IANA, endpoint de push `https://` | `CHECK` |
 
 Teste automatizado dessas regras: [`api/prisma/tests/integridade.sql`](../api/prisma/tests/integridade.sql) (roda numa transação e desfaz tudo).
 
@@ -143,6 +183,8 @@ psql "$DIRECT_URL" -f api/prisma/tests/integridade.sql
 | `account_balances` | `balanceCents` (só efetivados) e `projectedBalanceCents` (inclui pendentes) de cada conta |
 | `invoice_totals` | `totalCents` (compras confirmadas − estornos), `projectedTotalCents` (inclui previstas) e `paidCents` de cada fatura |
 | `recurrence_variance` | previsto × realizado de cada ocorrência de recorrência confirmada |
+
+Função `due_items_for_user(userId, data)`: lançamentos pendentes até a data, nos grupos em que o usuário quer aviso, com a marca de atrasado.
 
 ## Configurando o Supabase
 
