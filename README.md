@@ -61,7 +61,7 @@ Siga o passo a passo em [docs/banco-de-dados.md → Configurando o Supabase](doc
 
 ### Servidor no Render (gratuito)
 
-O arquivo `render.yaml` descreve o serviço. No [Render](https://render.com), vá em **New → Blueprint**, selecione este repositório e preencha `DATABASE_URL` e `DIRECT_URL` com os dados do Supabase. Depois, abra o endereço gerado no celular e use "Adicionar à tela inicial".
+O arquivo `render.yaml` descreve o serviço (região Virginia, a mesma do banco). No [Render](https://render.com), vá em **New → Blueprint**, selecione este repositório e preencha `DATABASE_URL` e `DIRECT_URL` com os dados do Supabase. O `JWT_SECRET` é gerado automaticamente. Depois, abra o endereço gerado no celular e use "Adicionar à tela inicial".
 
 > No plano gratuito do Render o serviço "dorme" após inatividade (o primeiro acesso demora alguns segundos).
 

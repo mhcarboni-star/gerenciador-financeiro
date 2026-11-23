@@ -6,6 +6,8 @@ services:
     name: gerenciador-financeiro
     runtime: node
     plan: free
+    # mesma região do banco no Supabase (East US / North Virginia) para as telas responderem rápido
+    region: virginia
     buildCommand: npm ci --include=dev && npm run build
     startCommand: npm start
     healthCheckPath: /api/health

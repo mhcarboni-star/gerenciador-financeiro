@@ -321,15 +321,14 @@ Função `due_items_for_user(userId, data)`: lançamentos pendentes até a data,
 
 ## Configurando o Supabase
 
-1. Crie um projeto em [supabase.com](https://supabase.com) (região **South America (São Paulo)**). Guarde a senha do banco.
-2. Em **Project Settings → Database → Connection string**, copie:
-   - **Transaction pooler** (porta `6543`) → `DATABASE_URL`, acrescentando `?pgbouncer=true` no final
-   - **Session pooler** ou **Direct connection** (porta `5432`) → `DIRECT_URL`
-3. Coloque as duas em `api/.env` (local) e nas variáveis de ambiente do servidor onde a API roda.
-4. Crie as tabelas:
-   ```bash
-   npm run db:deploy
-   ```
+1. Crie um projeto em [supabase.com](https://supabase.com) na região **East US (North Virginia)**, a mesma do servidor no Render (o Render não tem região no Brasil; servidor e banco perto um do outro deixam o app rápido). Guarde a senha do banco.
+2. No projeto, clique em **Connect** (topo da página) e copie:
+   - **Transaction pooler** (porta `6543`) → `DATABASE_URL`, acrescentando `?pgbouncer=true&connection_limit=1` no final
+   - **Session pooler** (porta `5432`) → `DIRECT_URL` (a "Direct connection" usa só IPv6, que o Render gratuito não acessa)
+
+   Em ambas, troque `[YOUR-PASSWORD]` pela senha do banco.
+3. Coloque as duas nas variáveis de ambiente do servidor (Render) e, para rodar localmente, em `api/.env`.
+4. As tabelas são criadas automaticamente quando o servidor inicia (`npm start` roda `prisma migrate deploy`). Localmente: `npm run db:deploy`.
 5. Confira em **Table Editor** no painel do Supabase.
 
 > **Segurança:** o app acessa o banco só pela API (usuário `postgres` via Prisma). A API pública do Supabase (PostgREST) não é usada. Como as tabelas ficam no schema `public`, ative **RLS** em todas sem criar políticas: assim a chave pública do Supabase não lê nada, e a API (que conecta direto no Postgres) continua funcionando. Há um comando pronto em [`api/prisma/supabase-rls.sql`](../api/prisma/supabase-rls.sql), para rodar no **SQL Editor** depois das migrações.
