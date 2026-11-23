@@ -6,7 +6,26 @@ export interface User {
   id: string;
   name: string;
   email: string;
+  households?: { id: string; name: string; role: "OWNER" | "MEMBER" }[];
+  activeHouseholdId?: string;
 }
+
+export interface Member {
+  userId: string;
+  name: string;
+  email: string;
+  role: "OWNER" | "MEMBER";
+}
+
+export interface HouseholdInfo {
+  id: string;
+  name: string;
+  myRole: "OWNER" | "MEMBER";
+  members: Member[];
+  invites: { id: string; email: string; token: string; expiresAt: string; invitedBy: string }[];
+}
+
+export type Scope = "eu" | "familia";
 
 export interface Category {
   id: string;
@@ -74,6 +93,8 @@ export interface Transaction {
   creditCardId: string | null;
   account: SourceRef;
   creditCard: SourceRef;
+  responsibleId: string | null;
+  responsible: { id: string; name: string } | null;
   destinationAccountId: string | null;
   destinationAccount: SourceRef;
   invoiceId: string | null;
@@ -105,6 +126,7 @@ export interface InstallmentInput {
   creditCardId: string | null;
   categoryId: string | null;
   notes: string | null;
+  responsibleId?: string | null;
 }
 
 export interface RecurrenceInput {
@@ -120,6 +142,7 @@ export interface RecurrenceInput {
   categoryId: string | null;
   amountIsEstimate: boolean;
   autoMarkPaid: boolean;
+  responsibleId?: string | null;
 }
 
 export interface Recurrence extends RecurrenceInput {
@@ -188,6 +211,7 @@ export interface LoanInput {
   paymentAccountId: string;
   color: string;
   notes: string | null;
+  responsibleId?: string | null;
 }
 
 export interface LoanPaymentInput {
@@ -209,10 +233,25 @@ export interface PlanItem {
   viaCard: boolean;
   sourceName: string | null;
   kind?: CommitmentKind;
+  responsibleName?: string;
+}
+
+export interface MemberPlan {
+  userId: string | null;
+  name: string;
+  incomeCents: number;
+  commitmentsCents: number;
+  savingsGoalCents: number;
+  availableCents: number;
+  variableSpentCents: number;
+  remainingCents: number;
 }
 
 export interface MonthPlan {
   month: string;
+  scope: Scope;
+  editableSavingsCents: number;
+  byMember: MemberPlan[];
   today: string;
   incomeCents: number;
   commitmentsCents: number;
@@ -229,7 +268,7 @@ export interface MonthPlan {
   budgetedCents: number;
   unbudgetedCents: number;
   canCopyBudgets: boolean;
-  budgets: { categoryId: string; name: string; color: string; limitCents: number | null; spentCents: number }[];
+  budgets: { categoryId: string; name: string; color: string; limitCents: number | null; ownLimitCents: number | null; spentCents: number }[];
   uncategorizedSpentCents: number;
 }
 
@@ -276,10 +315,13 @@ export interface TransactionInput {
   accountId: string | null;
   creditCardId: string | null;
   status?: "PAID" | "PENDING";
+  responsibleId?: string | null;
 }
 
 export interface Summary {
   month: string;
+  scope?: Scope;
+  byPerson?: PersonSummary[];
   incomeCents: number;
   expenseCents: number;
   balanceCents: number;
@@ -287,12 +329,36 @@ export interface Summary {
   byCategory: { categoryId: string | null; name: string; color: string; type: TxType; totalCents: number }[];
 }
 
+export interface PersonSummary {
+  userId: string | null;
+  name: string;
+  incomeCents: number;
+  expenseCents: number;
+  balanceCents: number;
+}
+
 const TOKEN_KEY = "gf_token";
+const HOUSEHOLD_KEY = "gf_household";
+
+const safe = <T,>(fn: () => T, fallback: T) => {
+  try {
+    return fn();
+  } catch {
+    return fallback;
+  }
+};
 
 export const tokenStore = {
-  get: () => localStorage.getItem(TOKEN_KEY),
-  set: (t: string) => localStorage.setItem(TOKEN_KEY, t),
-  clear: () => localStorage.removeItem(TOKEN_KEY),
+  get: () => safe(() => localStorage.getItem(TOKEN_KEY), null),
+  set: (t: string) => safe(() => localStorage.setItem(TOKEN_KEY, t), undefined),
+  clear: () => safe(() => { localStorage.removeItem(TOKEN_KEY); localStorage.removeItem(HOUSEHOLD_KEY); }, undefined),
+};
+
+/** Grupo ativo (para quem participa de mais de um). */
+export const householdStore = {
+  get: () => safe(() => localStorage.getItem(HOUSEHOLD_KEY), null),
+  set: (id: string) => safe(() => localStorage.setItem(HOUSEHOLD_KEY, id), undefined),
+  clear: () => safe(() => localStorage.removeItem(HOUSEHOLD_KEY), undefined),
 };
 
 export class ApiError extends Error {
@@ -306,11 +372,13 @@ export const setUnauthorizedHandler = (fn: () => void) => (onUnauthorized = fn);
 
 async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const token = tokenStore.get();
+  const household = householdStore.get();
   const res = await fetch(`/api${path}`, {
     ...init,
     headers: {
       "Content-Type": "application/json",
       ...(token ? { Authorization: `Bearer ${token}` } : {}),
+      ...(token && household ? { "X-Household-Id": household } : {}),
       ...init.headers,
     },
   });
@@ -318,6 +386,11 @@ async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
   const body = await res.json().catch(() => ({}));
   if (!res.ok) {
     if (res.status === 401 && token) onUnauthorized();
+    // grupo salvo não vale mais (saiu ou foi removido): volta para o grupo padrão
+    if (res.status === 403 && household && body.error === "Sem acesso a este grupo") {
+      householdStore.clear();
+      location.reload();
+    }
     const details = body.details as Record<string, string[]> | undefined;
     const first = details ? Object.values(details).flat()[0] : undefined;
     throw new ApiError(res.status, first ?? body.error ?? "Erro inesperado", details);
@@ -407,12 +480,22 @@ export const api = {
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
 
-  plan: (month: string) => request<MonthPlan>(`/plan?month=${month}`),
-  setSavingsGoal: (month: string, savingsGoalCents: number) =>
-    request<{ ok: true }>(`/plan/${month}`, { method: "PUT", body: json({ savingsGoalCents }) }),
-  setBudgets: (month: string, items: { categoryId: string; limitCents: number | null }[]) =>
-    request<{ ok: true }>(`/plan/${month}/orcamentos`, { method: "PUT", body: json({ items }) }),
-  copyPreviousPlan: (month: string) => request<{ copied: number }>(`/plan/${month}/copiar-anterior`, { method: "POST" }),
+  plan: (month: string, scope: Scope = "eu") => request<MonthPlan>(`/plan?month=${month}&escopo=${scope}`),
+  setSavingsGoal: (month: string, savingsGoalCents: number, scope: Scope = "eu") =>
+    request<{ ok: true }>(`/plan/${month}`, { method: "PUT", body: json({ savingsGoalCents, scope }) }),
+  setBudgets: (month: string, items: { categoryId: string; limitCents: number | null }[], scope: Scope = "eu") =>
+    request<{ ok: true }>(`/plan/${month}/orcamentos`, { method: "PUT", body: json({ items, scope }) }),
+  copyPreviousPlan: (month: string, scope: Scope = "eu") =>
+    request<{ copied: number }>(`/plan/${month}/copiar-anterior`, { method: "POST", body: json({ scope }) }),
 
-  summary: (month: string) => request<Summary>(`/summary?month=${month}`),
+  household: () => request<HouseholdInfo>("/household"),
+  renameHousehold: (name: string) => request<{ ok: true }>("/household", { method: "PUT", body: json({ name }) }),
+  createInvite: (email: string) => request<{ id: string; token: string; expiresAt: string }>("/household/convites", { method: "POST", body: json({ email }) }),
+  cancelInvite: (id: string) => request<void>(`/household/convites/${id}`, { method: "DELETE" }),
+  removeMember: (userId: string) => request<void>(`/household/membros/${userId}`, { method: "DELETE" }),
+  leaveHousehold: () => request<void>("/household/sair", { method: "POST" }),
+  inviteInfo: (token: string) => request<{ householdName: string; invitedBy: string; email: string; expiresAt: string }>(`/convites/${token}`),
+  acceptInvite: (token: string) => request<{ householdId: string }>(`/convites/${token}/aceitar`, { method: "POST" }),
+
+  summary: (month: string, scope: Scope = "eu") => request<Summary>(`/summary?month=${month}&escopo=${scope}`),
 };

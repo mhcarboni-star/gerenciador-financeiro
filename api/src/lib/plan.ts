@@ -29,6 +29,7 @@ export interface PlanItem {
   installmentPlanId: string | null;
   categoryId: string | null; // categoria principal (subcategoria já agrupada)
   sourceName: string | null;
+  responsibleId?: string | null; // null = Família (conjunto)
 }
 
 export function commitmentKind(i: PlanItem): CommitmentKind | null {

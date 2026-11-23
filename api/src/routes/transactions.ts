@@ -9,6 +9,7 @@ import { refreshInvoiceStatus } from "../lib/invoiceStatus.js";
 import { generateForHousehold } from "../lib/recurrenceService.js";
 import { addDays, todayIso } from "../lib/schedule.js";
 import { isBeforeCheckpoint, latestCheckpoints } from "../lib/balances.js";
+import { resolveResponsible } from "../lib/members.js";
 
 export const transactionsRouter = Router();
 
@@ -25,6 +26,8 @@ const schema = z.object({
   creditCardId: z.string().nullable().optional(),
   status: z.enum(["PAID", "PENDING"]).optional(),
   notes: z.string().trim().max(500).nullable().optional(),
+  /** null = Família (conjunto); omitido = quem está lançando (ou mantém, na edição) */
+  responsibleId: z.string().nullable().optional(),
 });
 
 const transferSchema = z
@@ -44,6 +47,7 @@ const INCLUDE = {
   destinationAccount: { select: { id: true, name: true, color: true } },
   creditCard: { select: { id: true, name: true, color: true } },
   loan: { select: { id: true, name: true } },
+  responsible: { select: { id: true, name: true } },
 } as const;
 
 async function checkCategory(req: AuthRequest, categoryId: string | null | undefined, type: "INCOME" | "EXPENSE") {
@@ -139,8 +143,9 @@ transactionsRouter.post(
     const data = schema.parse(req.body);
     await checkCategory(req, data.categoryId, data.type);
     const source = await resolveSource(req, data);
+    const responsibleId = await resolveResponsible(hid(req), uid(req), data.responsibleId);
     const t = await prisma.transaction.create({
-      data: { ...data, ...source, date: toDate(data.date), householdId: hid(req), createdById: uid(req) },
+      data: { ...data, ...source, responsibleId, date: toDate(data.date), householdId: hid(req), createdById: uid(req) },
       include: INCLUDE,
     });
     res.status(201).json(t);
@@ -156,9 +161,10 @@ transactionsRouter.put(
     const data = schema.parse(req.body);
     await checkCategory(req, data.categoryId, data.type);
     const source = await resolveSource(req, data);
+    const responsibleId = data.responsibleId === undefined ? old.responsibleId : await resolveResponsible(hid(req), uid(req), data.responsibleId);
     const t = await prisma.transaction.update({
       where: { id },
-      data: { ...data, ...source, date: toDate(data.date) },
+      data: { ...data, ...source, responsibleId, date: toDate(data.date) },
       include: INCLUDE,
     });
     res.json(t);

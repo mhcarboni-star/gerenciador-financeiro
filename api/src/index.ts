@@ -15,6 +15,7 @@ import { recurrencesRouter } from "./routes/recurrences.js";
 import { installmentsRouter } from "./routes/installments.js";
 import { invoicesRouter } from "./routes/invoices.js";
 import { planRouter } from "./routes/plan.js";
+import { householdRouter, invitesRouter } from "./routes/household.js";
 import { requireAuth } from "./lib/auth.js";
 import { errorHandler } from "./lib/http.js";
 
@@ -34,6 +35,8 @@ app.use("/api/recurrences", requireAuth, recurrencesRouter);
 app.use("/api/installments", requireAuth, installmentsRouter);
 app.use("/api/invoices", requireAuth, invoicesRouter);
 app.use("/api/plan", requireAuth, planRouter);
+app.use("/api/household", requireAuth, householdRouter);
+app.use("/api/convites", invitesRouter);
 app.use("/api", (_req, res) => res.status(404).json({ error: "Rota não encontrada" }));
 
 // Em produção, a própria API entrega o frontend já compilado.

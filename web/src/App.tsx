@@ -11,6 +11,9 @@ import { RecurrencesPage } from "./pages/RecurrencesPage";
 import { LoansPage } from "./pages/LoansPage";
 import { LoanPage } from "./pages/LoanPage";
 import { PlanPage } from "./pages/PlanPage";
+import { FamilyPage } from "./pages/FamilyPage";
+import { InvitePage } from "./pages/InvitePage";
+import { HouseholdProvider } from "./household";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -19,6 +22,7 @@ export function App() {
   if (!user) {
     return (
       <Routes>
+        <Route path="/convite/:token" element={<InvitePage />} />
         <Route path="/entrar" element={<LoginPage mode="login" />} />
         <Route path="/cadastro" element={<LoginPage mode="register" />} />
         <Route path="*" element={<Navigate to="/entrar" replace />} />
@@ -27,8 +31,11 @@ export function App() {
   }
 
   return (
+    <HouseholdProvider>
     <Routes>
+      <Route path="/convite/:token" element={<InvitePage />} />
       <Route element={<Layout />}>
+        <Route path="/familia" element={<FamilyPage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/lancamentos" element={<TransactionsPage />} />
         <Route path="/contas" element={<AccountsPage />} />
@@ -41,5 +48,6 @@ export function App() {
       </Route>
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
+    </HouseholdProvider>
   );
 }

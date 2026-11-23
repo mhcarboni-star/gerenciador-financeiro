@@ -5,12 +5,15 @@ import { currentMonth, money } from "../format";
 import { MonthPicker } from "../components/MonthPicker";
 import { TransactionList } from "../components/TransactionList";
 import { useTransactionEditor } from "../useTransactionEditor";
+import { useHousehold } from "../household";
 
 export function TransactionsPage() {
   const [month, setMonth] = useState(currentMonth());
   const [items, setItems] = useState<Transaction[]>([]);
   const [filter, setFilter] = useState<TxType | "TRANSFER" | "ALL">("ALL");
   const [search, setSearch] = useState("");
+  const { isFamily, info, myId } = useHousehold();
+  const [person, setPerson] = useState<string>("all"); // all | <userId> | family
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
@@ -28,9 +31,10 @@ export function TransactionsPage() {
           t.type === filter ||
           (filter === "EXPENSE" && t.type === "LOAN_PAYMENT") ||
           (filter === "TRANSFER" && ["INVOICE_PAYMENT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"].includes(t.type))) &&
-        (!q || t.description.toLowerCase().includes(q) || t.category?.name.toLowerCase().includes(q)),
+        (!q || t.description.toLowerCase().includes(q) || t.category?.name.toLowerCase().includes(q)) &&
+        (person === "all" || (person === "family" ? !t.responsibleId : t.responsibleId === person)),
     );
-  }, [items, filter, search]);
+  }, [items, filter, search, person]);
 
   // Transferências e pagamentos de fatura não mudam o resultado do mês.
   const total = visible.reduce(
@@ -72,6 +76,16 @@ export function TransactionsPage() {
             </button>
           ))}
         </div>
+        {isFamily && info && (
+          <select className="person-filter" value={person} onChange={(e) => setPerson(e.target.value)} aria-label="De quem">
+            <option value="all">Todos</option>
+            <option value={myId}>Eu</option>
+            {info.members.filter((m) => m.userId !== myId).map((m) => (
+              <option key={m.userId} value={m.userId}>{m.name.split(" ")[0]}</option>
+            ))}
+            <option value="family">Família</option>
+          </select>
+        )}
         <input
           className="search"
           type="search"

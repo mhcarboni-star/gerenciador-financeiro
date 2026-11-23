@@ -1,6 +1,8 @@
 import { useState, type FormEvent } from "react";
 import { api, type Account, type Category, type CreditCard, type Frequency, type Transaction, type TxType } from "../api";
 import { centsToInput, money, parseMoney, today } from "../format";
+import { useHousehold } from "../household";
+import { ResponsibleSelect } from "./ResponsibleSelect";
 
 interface Props {
   categories: Category[];
@@ -32,6 +34,8 @@ const FREQUENCIES: [Frequency, string][] = [
 
 export function TransactionForm({ categories, accounts, cards, initial, onSaved }: Props) {
   const editing = !!initial;
+  const { myId } = useHousehold();
+  const [responsibleId, setResponsibleId] = useState<string | null>(initial ? initial.responsibleId : myId);
   const [kind, setKind] = useState<Kind>((initial?.type as Kind) ?? "EXPENSE");
   const [repeat, setRepeat] = useState<Repeat>("ONCE");
   const [description, setDescription] = useState(initial?.description ?? "");
@@ -76,11 +80,11 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
   function submit(e: FormEvent) {
     e.preventDefault();
     if (!cents || cents <= 0) return setError("Informe um valor válido, ex.: 45,90");
-    const base = { description, categoryId: categoryId || null, notes: notes.trim() || null };
+    const base = { description, categoryId: categoryId || null, notes: notes.trim() || null, responsibleId };
 
     if (kind === "TRANSFER") {
       if (!accountId) return setError("Escolha a conta de origem");
-      const data = { description: description.trim() || undefined, amountCents: cents, date, accountId, destinationAccountId: toAccount, notes: base.notes };
+      const data = { description: description.trim() || undefined, amountCents: cents, date, accountId, destinationAccountId: toAccount, notes: notes.trim() || null };
       return run(() => (editing ? api.updateTransfer(initial!.id, data) : api.createTransfer(data)));
     }
     if (!editing && repeat === "INSTALLMENTS") {
@@ -90,7 +94,7 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
     if (!editing && repeat === "RECURRING") {
       return run(() =>
         api.createRecurrence({
-          type, description, categoryId: base.categoryId, amountCents: cents, frequency, interval: 1,
+          type, description, categoryId: base.categoryId, responsibleId, amountCents: cents, frequency, interval: 1,
           startDate: date, endDate: endDate || null, accountId, creditCardId, amountIsEstimate: estimate, autoMarkPaid: auto,
         }),
       );
@@ -245,6 +249,8 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
           Data anterior ao ajuste de saldo de {adjusted.map((a) => `${a.name} (${a.lastAdjustment!.date.split("-").reverse().slice(0, 2).join("/")})`).join(", ")}: o lançamento fica só registrado e não muda o saldo.
         </p>
       )}
+
+      {kind !== "TRANSFER" && <ResponsibleSelect value={responsibleId} onChange={setResponsibleId} />}
 
       {repeat === "RECURRING" && !editing && (
         <fieldset className="group">

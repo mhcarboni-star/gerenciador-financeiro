@@ -5,6 +5,7 @@ import { hid, uid, type AuthRequest } from "../lib/auth.js";
 import { ah, HttpError } from "../lib/http.js";
 import { getOrCreateInvoice } from "../lib/invoiceStore.js";
 import { addMonths, todayIso } from "../lib/schedule.js";
+import { resolveResponsible } from "../lib/members.js";
 
 export const installmentsRouter = Router();
 
@@ -18,6 +19,7 @@ const schema = z
     creditCardId: z.string().nullable().optional(),
     categoryId: z.string().nullable().optional(),
     notes: z.string().trim().max(500).nullable().optional(),
+    responsibleId: z.string().nullable().optional(),
   })
   .refine((v) => !!v.accountId !== !!v.creditCardId, "Escolha uma conta ou um cartão");
 
@@ -45,6 +47,7 @@ installmentsRouter.post(
     if (v.categoryId && !(await prisma.category.findFirst({ where: { id: v.categoryId, householdId, type: "EXPENSE" } }))) {
       throw new HttpError(400, "Categoria inválida");
     }
+    const responsibleId = await resolveResponsible(householdId, uid(req), v.responsibleId);
     const today = todayIso();
     const amounts = splitAmount(v.totalAmountCents, v.installmentCount);
 
@@ -59,6 +62,7 @@ installmentsRouter.post(
           accountId: v.accountId ?? null,
           creditCardId: v.creditCardId ?? null,
           categoryId: v.categoryId ?? null,
+          responsibleId,
         },
       });
       for (let i = 0; i < v.installmentCount; i++) {
@@ -80,6 +84,7 @@ installmentsRouter.post(
             installmentPlanId: plan.id,
             installmentNumber: i + 1,
             createdById: uid(req),
+            responsibleId,
           },
         });
       }

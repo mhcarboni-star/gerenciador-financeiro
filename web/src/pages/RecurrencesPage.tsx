@@ -3,10 +3,13 @@ import { Link } from "react-router-dom";
 import { api, type Account, type Category, type CreditCard, type Frequency, type Recurrence } from "../api";
 import { centsToInput, money, parseMoney, shortDate } from "../format";
 import { Modal } from "../components/Modal";
+import { ResponsibleSelect } from "../components/ResponsibleSelect";
+import { useHousehold } from "../household";
 
 const FREQ_LABEL: Record<Frequency, string> = { MONTHLY: "Todo mês", WEEKLY: "Toda semana", YEARLY: "Todo ano" };
 
 export function RecurrencesPage() {
+  const { isFamily, memberName } = useHousehold();
   const [items, setItems] = useState<Recurrence[]>([]);
   const [editing, setEditing] = useState<Recurrence | null>(null);
   const [refs, setRefs] = useState<{ accounts: Account[]; cards: CreditCard[]; categories: Category[] }>({ accounts: [], cards: [], categories: [] });
@@ -38,6 +41,7 @@ export function RecurrencesPage() {
           </span>
           <span className="muted small">
             {FREQ_LABEL[r.frequency]} · {(r.creditCard ?? r.account)?.name}
+            {isFamily ? ` · ${memberName(r.responsibleId)}` : ""}
             {r.active && r.nextPending ? ` · próximo ${shortDate(r.nextPending.date)}` : ""}
             {!r.active && r.endDate ? ` · encerrado em ${shortDate(r.endDate)}` : ""}
           </span>
@@ -100,6 +104,7 @@ function RecurrenceModal({ item, accounts, cards, categories, onClose, onSaved }
   const [categoryId, setCategoryId] = useState(item.categoryId ?? "");
   const [estimate, setEstimate] = useState(item.amountIsEstimate);
   const [auto, setAuto] = useState(item.autoMarkPaid);
+  const [responsibleId, setResponsibleId] = useState<string | null>(item.responsibleId ?? null);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -123,7 +128,7 @@ function RecurrenceModal({ item, accounts, cards, categories, onClose, onSaved }
       api.updateRecurrence(item.id, {
         type: item.type, description, amountCents: cents, frequency, interval: item.interval, startDate, endDate: endDate || null,
         accountId: source.startsWith("a:") ? source.slice(2) : null, creditCardId: source.startsWith("c:") ? source.slice(2) : null,
-        categoryId: categoryId || null, amountIsEstimate: estimate, autoMarkPaid: auto,
+        categoryId: categoryId || null, amountIsEstimate: estimate, autoMarkPaid: auto, responsibleId,
       }),
     );
   }
@@ -189,6 +194,7 @@ function RecurrenceModal({ item, accounts, cards, categories, onClose, onSaved }
             </select>
           </label>
         </div>
+        <ResponsibleSelect value={responsibleId} onChange={setResponsibleId} />
         <label className="check">
           <input type="checkbox" checked={estimate} onChange={(e) => { setEstimate(e.target.checked); if (e.target.checked) setAuto(false); }} />
           Valor estimado (pedir o valor real ao confirmar)

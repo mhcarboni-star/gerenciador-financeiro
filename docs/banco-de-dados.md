@@ -52,7 +52,7 @@ erDiagram
 | `User` | login | `email` (único), `passwordHash` |
 | `Household` | grupo financeiro (casa, casal, pessoal) | `name`, `currency` |
 | `HouseholdMember` | quem participa de qual grupo | `role`: `OWNER` / `MEMBER`, `notifyDueItems` |
-| `HouseholdInvite` | convite por e-mail | `token` (único), `expiresAt`, `acceptedAt` |
+| `HouseholdInvite` | convite por link | `email`, `token` (único), `expiresAt` (7 dias), `acceptedAt` |
 | `Account` | corrente, poupança, carteira, investimento | `initialBalanceCents`, `includeInTotals`, `ownerId` (null = conjunta) |
 | `CreditCard` | cartão | `limitCents`, `closingDay`, `dueDay`, `paymentAccountId`, `holderId` |
 | `CreditCardInvoice` | fatura mensal | `referenceMonth` (dia 1 do mês do vencimento), `closingDate`, `dueDate`, `status` |
@@ -62,7 +62,7 @@ erDiagram
 | `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
 | `Budget` | limite mensal de gastos do dia a dia por categoria principal | `month` (dia 1), `limitCents` |
 | `BalanceCheckpoint` | marco de saldo de uma conta (ajuste de saldo) | `date`, `balanceCents`, `transactionId` (o lançamento do ajuste) |
-| `MonthPlan` | planejamento do mês | `month` (dia 1), `savingsGoalCents` (quanto quer guardar) |
+| `MonthPlan` | planejamento do mês, por pessoa ou da parte conjunta | `month` (dia 1), `userId` (null = Família), `savingsGoalCents` |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
 | `Loan` | empréstimo que o usuário pegou | `principalCents`, `interestType`, `monthlyRate`, `installmentCount`, `firstDueDate`, `status` |
 | `PushSubscription` | aparelho que recebe aviso (Web Push) | `endpoint` (único), `p256dh`, `auth`, `failureCount` |
@@ -123,6 +123,25 @@ Efeito nos saldos:
 - **Conta:** `balanceCents` só conta o que foi confirmado; `projectedBalanceCents` inclui as previsões.
 - **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
 - **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
+
+## Visão individual e da família
+
+Um grupo (`Household`) pode ter várias pessoas. Os membros entram por **convite** (`HouseholdInvite`): o dono gera um link válido por 7 dias (`/convite/<token>`) e envia pelo WhatsApp ou e-mail. A pessoa cria a conta (ou entra) e aceita. Quem participa de mais de um grupo alterna o grupo ativo; a API recebe o grupo pelo cabeçalho `X-Household-Id`.
+
+**De quem é cada lançamento:** `Transaction.responsibleId`, escolhido no lançamento. O padrão é quem está lançando. Exemplo: a compra feita com o cartão adicional da esposa fica no nome dela, mesmo sendo o mesmo cartão.
+
+- `null` = **Família (conjunto)**: contas da casa (aluguel, condomínio). Entram só no consolidado.
+- Recorrências, parcelamentos e empréstimos também têm `responsibleId`, herdado pelos lançamentos que geram.
+- Ao remover um membro, o que estava no nome dele vira Família, para não se perder o histórico.
+
+| Visão | O que considera |
+|---|---|
+| **Eu** | só lançamentos com `responsibleId` = eu; minha meta de guardar e meus limites (`MonthPlan`/`Budget` com `userId` = eu) |
+| **Família** | todos os lançamentos do grupo; meta de guardar = soma das metas de todos mais a parte conjunta (`userId` null); limites somados por categoria; quebra **por pessoa** (entradas, saídas, resultado, disponível, resta) e linha **Família (conjunto)** |
+
+- O saldo das contas é sempre do grupo (as contas são compartilhadas).
+- Na visão Família, editar a meta ou os limites altera a **parte conjunta**. Cada pessoa edita a sua na aba Eu.
+- O banco garante que responsável, dono do plano e dono do limite são membros do grupo (triggers `check_responsible` e `check_plan_owner`).
 
 ## Ajuste de saldo
 

@@ -1,5 +1,6 @@
 import type { Transaction } from "../api";
 import { money, shortDate } from "../format";
+import { useHousehold } from "../household";
 
 function subtitle(t: Transaction) {
   const parts = [shortDate(t.date)];
@@ -35,6 +36,7 @@ const dotColor = (t: Transaction) =>
   t.type === "TRANSFER" || t.type === "INVOICE_PAYMENT" || t.type === "ADJUSTMENT_IN" || t.type === "ADJUSTMENT_OUT" ? "#94a3b8" : t.type === "LOAN_PAYMENT" ? "#b45309" : (t.category?.color ?? "#94a3b8");
 
 export function TransactionList({ items, onSelect }: { items: Transaction[]; onSelect: (t: Transaction) => void }) {
+  const { isFamily, memberName } = useHousehold();
   if (items.length === 0) return <p className="muted empty">Nenhum lançamento neste mês.</p>;
   return (
     <ul className="tx-list">
@@ -50,7 +52,12 @@ export function TransactionList({ items, onSelect }: { items: Transaction[]; onS
                   {t.status === "PENDING" && <span className="badge">previsto</span>}
                   {t.beforeAdjustment && <span className="badge" title="Data anterior ao ajuste de saldo: não muda o saldo">só registro</span>}
                 </span>
-                <span className="muted small">{subtitle(t)}</span>
+                <span className="muted small">
+                  {isFamily && !["TRANSFER", "INVOICE_PAYMENT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"].includes(t.type) && (
+                    <span className={`who ${t.responsibleId ? "" : "family"}`}>{memberName(t.responsibleId)}</span>
+                  )}
+                  {subtitle(t)}
+                </span>
               </span>
               <span className={`tx-amount ${a.cls}`}>{a.text}</span>
             </button>

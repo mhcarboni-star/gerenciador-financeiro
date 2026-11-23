@@ -5,7 +5,7 @@ Aplicação web para controle financeiro pessoal. Funciona no celular e no PC co
 ## Funcionalidades
 
 - Cadastro e login com e-mail e senha
-- Uso individual ou compartilhado (grupo familiar)
+- **Grupo familiar:** convite por link, responsável em cada lançamento, visões **Eu** e **Família** (entradas e saídas de todos, quanto cada um pode gastar)
 - Lançamentos de receitas e despesas, com categoria, data e observações
 - **Planejamento do mês:** quanto posso gastar (receitas − compromissos − quanto quero guardar), quanto resta e quanto por dia, com limites por categoria
 - Resumo do mês: receitas, despesas, saldo do mês e saldo acumulado
@@ -87,9 +87,13 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 | GET/POST/PUT/DELETE | `/api/cards[/:id]` | Cartões com limite e fatura atual |
 | GET | `/api/invoices/card/:cardId`, `/api/invoices/:id` | Faturas de um cartão / detalhe |
 | POST | `/api/invoices/:id/pagar` | Paga a fatura (total ou parcial) |
-| GET | `/api/plan?month=YYYY-MM` | Planejamento: disponível, compromissos, resta, limites por categoria |
+| GET | `/api/plan?month=YYYY-MM&escopo=eu\|familia` | Planejamento: disponível, compromissos, resta, limites, quebra por pessoa |
 | PUT | `/api/plan/:month`, `/api/plan/:month/orcamentos` | Meta de guardar / limites por categoria |
 | POST | `/api/plan/:month/copiar-anterior` | Copia limites e meta do mês anterior |
+| GET/PUT | `/api/household` | Grupo ativo: membros e convites / renomear |
+| POST/DELETE | `/api/household/convites[/:id]` | Gera / cancela convite (link) |
+| DELETE | `/api/household/membros/:userId` · POST `/api/household/sair` | Remove membro / sair do grupo |
+| GET · POST | `/api/convites/:token` · `/api/convites/:token/aceitar` | Dados do convite / aceitar |
 | GET/POST/PUT/DELETE | `/api/categories[/:id]` | Categorias |
 | GET/POST/PUT/DELETE | `/api/loans[/:id]` | Empréstimos (cadastro gera parcelas e entrada do dinheiro) |
 | POST | `/api/loans/:id/pagamentos` | Pagamento avulso / antecipação (recalcula as parcelas) |
@@ -101,7 +105,6 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 O banco já suporta os itens abaixo; faltam as telas e rotas da API:
 
 - Metas de economia (objetivos de longo prazo)
-- Convites para o grupo familiar
 - Avisos no celular das contas do dia (Web Push + tarefa agendada)
 
 Depois:

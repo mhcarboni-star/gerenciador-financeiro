@@ -5,6 +5,8 @@ import { addMonthsIso, dayMonth, money, parseMoney, shortDate, today } from "../
 import { Modal } from "../components/Modal";
 import { ColorPicker } from "../components/ColorPicker";
 import { INTEREST_LABEL, parseRate, previewInstallment } from "../loanMath";
+import { ResponsibleSelect } from "../components/ResponsibleSelect";
+import { useHousehold } from "../household";
 
 export function LoansPage() {
   const [loans, setLoans] = useState<Loan[]>([]);
@@ -137,6 +139,8 @@ function NewLoanModal({ accounts, onClose, onSaved }: { accounts: Account[]; onC
   const [received, setReceived] = useState(accounts[0]?.id ?? "");
   const [paymentAccountId, setPaymentAccountId] = useState(accounts[0]?.id ?? "");
   const [color, setColor] = useState("#ca8a04");
+  const { myId } = useHousehold();
+  const [responsibleId, setResponsibleId] = useState<string | null>(myId);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
 
@@ -159,7 +163,7 @@ function NewLoanModal({ accounts, onClose, onSaved }: { accounts: Account[]; onC
         name, lender: lender.trim() || null, principalCents: cents, interestType,
         monthlyRate: interestType === "NONE" ? null : r,
         installmentCount: withPlan ? n : null, startDate, firstDueDate: withPlan ? firstDue : null,
-        receivedAccountId: received || null, paymentAccountId, color, notes: null,
+        receivedAccountId: received || null, paymentAccountId, color, notes: null, responsibleId,
       });
       onSaved(res.id);
     } catch (err) {
@@ -247,6 +251,7 @@ function NewLoanModal({ accounts, onClose, onSaved }: { accounts: Account[]; onC
             ))}
           </select>
         </label>
+        <ResponsibleSelect value={responsibleId} onChange={setResponsibleId} label="Responsável pela dívida" />
         <ColorPicker value={color} onChange={setColor} />
         {error && <p className="error">{error}</p>}
         <div className="actions">

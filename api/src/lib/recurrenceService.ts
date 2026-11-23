@@ -47,6 +47,7 @@ export async function generateOccurrences(recurrenceId: string) {
             invoiceId: invoice?.id ?? null,
             categoryId: rec.categoryId,
             recurrenceId: rec.id,
+            responsibleId: rec.responsibleId,
           },
         });
         await tx.$executeRaw`RELEASE SAVEPOINT occ`;

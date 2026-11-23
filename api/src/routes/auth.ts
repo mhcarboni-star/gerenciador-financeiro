@@ -57,8 +57,15 @@ authRouter.get(
   "/me",
   requireAuth,
   ah(async (req: AuthRequest, res) => {
-    const user = await prisma.user.findUnique({ where: { id: uid(req) } });
+    const user = await prisma.user.findUnique({
+      where: { id: uid(req) },
+      include: { memberships: { include: { household: { select: { id: true, name: true } } }, orderBy: { joinedAt: "asc" } } },
+    });
     if (!user) throw new HttpError(401, "Usuário não encontrado");
-    res.json(publicUser(user));
+    res.json({
+      ...publicUser(user),
+      households: user.memberships.map((m) => ({ id: m.household.id, name: m.household.name, role: m.role })),
+      activeHouseholdId: req.householdId,
+    });
   }),
 );

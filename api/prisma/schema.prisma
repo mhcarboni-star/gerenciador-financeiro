@@ -102,6 +102,12 @@ model User {
   cardsHeld           CreditCard[]      @relation("CardHolder")
 
   pushSubscriptions    PushSubscription[]
+  responsibleFor       Transaction[]         @relation("TransactionResponsible")
+  recurrencesFor       Recurrence[]          @relation("RecurrenceResponsible")
+  installmentsFor      InstallmentPlan[]     @relation("InstallmentResponsible")
+  loansFor             Loan[]                @relation("LoanResponsible")
+  monthPlans           MonthPlan[]
+  budgets              Budget[]
   notificationSettings NotificationSettings?
   notificationLogs     NotificationLog[]
 }
@@ -307,12 +313,14 @@ model Transaction {
   loanPrincipalCents    Int?
   loanInterestCents     Int?
 
-  createdById String?
-  createdAt   DateTime  @default(now())
-  updatedAt   DateTime  @updatedAt
+  createdById   String?
+  /// De quem é o lançamento na visão individual; null = Família (conjunto, só no consolidado)
+  responsibleId String?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
   /// Quando o lançamento passou a PAID (preenchido pelo banco). Usado pela regra do ajuste
   /// de saldo: no dia do ajuste, só conta o que foi efetivado depois dele.
-  paidAt      DateTime?
+  paidAt        DateTime?
 
   household          Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
   account            Account?           @relation("TxAccount", fields: [accountId], references: [id], onDelete: Restrict)
@@ -325,12 +333,14 @@ model Transaction {
   goal               Goal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
   loan               Loan?              @relation(fields: [loanId], references: [id], onDelete: Cascade)
   createdBy          User?              @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  responsible        User?              @relation("TransactionResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   balanceCheckpoint  BalanceCheckpoint?
 
   @@unique([installmentPlanId, installmentNumber])
   @@unique([loanId, loanInstallmentNumber])
   @@unique([recurrenceId, occurrenceDate]) /// impede gerar a mesma ocorrência duas vezes
   @@index([householdId, date])
+  @@index([householdId, responsibleId, date])
   @@index([householdId, status, date]) /// "previstos para hoje / atrasados"
   @@index([accountId, date])
   @@index([destinationAccountId])
@@ -342,6 +352,8 @@ model Transaction {
 model InstallmentPlan {
   id               String   @id @default(cuid())
   householdId      String
+  /// responsável padrão dos lançamentos gerados; null = Família
+  responsibleId    String?
   description      String
   totalAmountCents Int
   installmentCount Int
@@ -352,6 +364,7 @@ model InstallmentPlan {
   createdAt        DateTime @default(now())
 
   household    Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  responsible  User?         @relation("InstallmentResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   account      Account?      @relation(fields: [accountId], references: [id], onDelete: Restrict)
   creditCard   CreditCard?   @relation(fields: [creditCardId], references: [id], onDelete: Restrict)
   category     Category?     @relation(fields: [categoryId], references: [id], onDelete: SetNull)
@@ -367,6 +380,8 @@ model InstallmentPlan {
 model Recurrence {
   id                   String          @id @default(cuid())
   householdId          String
+  /// responsável padrão dos lançamentos gerados; null = Família
+  responsibleId        String?
   type                 TransactionType
   description          String
   amountCents          Int
@@ -386,6 +401,7 @@ model Recurrence {
   updatedAt            DateTime        @updatedAt
 
   household          Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  responsible        User?         @relation("RecurrenceResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   account            Account?      @relation("RecAccount", fields: [accountId], references: [id], onDelete: Restrict)
   destinationAccount Account?      @relation("RecDestination", fields: [destinationAccountId], references: [id], onDelete: Restrict)
   creditCard         CreditCard?   @relation(fields: [creditCardId], references: [id], onDelete: Restrict)
@@ -402,6 +418,8 @@ model Recurrence {
 model MonthPlan {
   id               String   @id @default(cuid())
   householdId      String
+  /// dono do planejamento; null = parte da Família (conjunto)
+  userId           String?
   month            DateTime @db.Date /// dia 1 do mês
   savingsGoalCents Int      @default(0)
   notes            String?
@@ -409,8 +427,11 @@ model MonthPlan {
   updatedAt        DateTime @updatedAt
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([householdId, month])
+  /// índice criado em SQL com NULLS NOT DISTINCT (null = Família conta como um dono)
+  @@unique([householdId, month, userId], map: "MonthPlan_unique_owner")
+  @@index([householdId, month])
 }
 
 /// Limite de gasto do dia a dia de uma categoria principal em um mês (parte do planejamento).
@@ -418,6 +439,8 @@ model Budget {
   id          String   @id @default(cuid())
   householdId String
   categoryId  String
+  /// dono do limite; null = Família (conjunto)
+  userId      String?
   month       DateTime @db.Date /// dia 1 do mês
   limitCents  Int
   createdAt   DateTime @default(now())
@@ -425,8 +448,10 @@ model Budget {
 
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   category  Category  @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+  user      User?     @relation(fields: [userId], references: [id], onDelete: Cascade)
 
-  @@unique([categoryId, month])
+  /// índice criado em SQL com NULLS NOT DISTINCT
+  @@unique([categoryId, month, userId], map: "Budget_unique_owner")
   @@index([householdId, month])
 }
 
@@ -481,6 +506,8 @@ model BalanceCheckpoint {
 model Loan {
   id                String           @id @default(cuid())
   householdId       String
+  /// responsável padrão dos lançamentos gerados; null = Família
+  responsibleId     String?
   name              String /// ex.: "Consignado Banco X", "Empréstimo do tio"
   lender            String? /// credor
   principalCents    Int /// valor emprestado
@@ -500,6 +527,7 @@ model Loan {
   updatedAt         DateTime         @updatedAt
 
   household       Household     @relation(fields: [householdId], references: [id], onDelete: Cascade)
+  responsible     User?         @relation("LoanResponsible", fields: [responsibleId], references: [id], onDelete: SetNull)
   receivedAccount Account?      @relation("LoanReceivedAccount", fields: [receivedAccountId], references: [id], onDelete: SetNull)
   paymentAccount  Account?      @relation("LoanPaymentAccount", fields: [paymentAccountId], references: [id], onDelete: SetNull)
   transactions    Transaction[]

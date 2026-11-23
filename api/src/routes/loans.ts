@@ -8,6 +8,7 @@ import { renderLoanReportPdf } from "../lib/loanReportPdf.js";
 import { buildSchedule } from "../lib/loans.js";
 import { computeSplit, recalcLoan } from "../lib/loanService.js";
 import { todayIso } from "../lib/schedule.js";
+import { resolveResponsible } from "../lib/members.js";
 
 export const loansRouter = Router();
 
@@ -28,6 +29,7 @@ const createSchema = z
     paymentAccountId: z.string().min(1, "Escolha a conta dos pagamentos"),
     color: z.string().regex(/^#[0-9a-fA-F]{6}$/).optional(),
     notes: z.string().trim().max(500).nullable().optional(),
+    responsibleId: z.string().nullable().optional(),
   })
   .refine((v) => v.interestType === "NONE" || (v.monthlyRate ?? 0) > 0 || v.interestType === "PRICE", "Informe a taxa de juros")
   .refine((v) => v.interestType !== "PRICE" || !!v.installmentCount, "Informe o número de parcelas")
@@ -105,6 +107,7 @@ loansRouter.post(
     await checkAccount(req, v.paymentAccountId);
     const householdId = hid(req);
     const rate = v.interestType === "NONE" ? 0 : (v.monthlyRate ?? 0);
+    const responsibleId = await resolveResponsible(householdId, uid(req), v.responsibleId);
 
     const loan = await prisma.$transaction(async (tx) => {
       const loan = await tx.loan.create({
@@ -122,13 +125,14 @@ loansRouter.post(
           paymentAccountId: v.paymentAccountId,
           color: v.color,
           notes: v.notes ?? null,
+          responsibleId,
         },
       });
       if (v.receivedAccountId) {
         await tx.transaction.create({
           data: {
             householdId, type: "LOAN_RECEIPT", status: "PAID", description: v.name, amountCents: v.principalCents,
-            date: d(v.startDate), accountId: v.receivedAccountId, loanId: loan.id, createdById: uid(req),
+            date: d(v.startDate), accountId: v.receivedAccountId, loanId: loan.id, createdById: uid(req), responsibleId,
           },
         });
       }
@@ -143,6 +147,7 @@ loansRouter.post(
             amountCents: it.amountCents, expectedAmountCents: it.amountCents,
             date: d(it.dueDate), occurrenceDate: d(it.dueDate), accountId: v.paymentAccountId, loanId: loan.id,
             loanInstallmentNumber: it.number, loanPrincipalCents: it.principalCents, loanInterestCents: it.interestCents,
+            responsibleId,
           })),
         });
       }
@@ -194,6 +199,7 @@ loansRouter.post(
           householdId: loan.householdId, type: "LOAN_PAYMENT", status: "PAID", description: `${loan.name} · pagamento avulso`,
           amountCents: v.amountCents, date: d(v.date), accountId: v.accountId, loanId: loan.id,
           loanPrincipalCents: split.principalCents, loanInterestCents: split.interestCents, createdById: uid(req),
+          responsibleId: loan.responsibleId,
         },
       });
       await recalcLoan(tx, loan.id);

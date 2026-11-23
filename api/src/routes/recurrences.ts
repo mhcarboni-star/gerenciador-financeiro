@@ -5,6 +5,8 @@ import { hid, type AuthRequest } from "../lib/auth.js";
 import { ah, HttpError } from "../lib/http.js";
 import { generateOccurrences, regenerateFuture } from "../lib/recurrenceService.js";
 import { addDays, todayIso } from "../lib/schedule.js";
+import { resolveResponsible } from "../lib/members.js";
+import { uid } from "../lib/auth.js";
 
 export const recurrencesRouter = Router();
 
@@ -23,6 +25,7 @@ const schema = z
     categoryId: z.string().nullable().optional(),
     amountIsEstimate: z.boolean().default(false),
     autoMarkPaid: z.boolean().default(false),
+    responsibleId: z.string().nullable().optional(),
   })
   .refine((v) => !(v.amountIsEstimate && v.autoMarkPaid), "Valor estimado precisa de confirmação; desmarque a confirmação automática")
   .refine((v) => !v.endDate || v.endDate >= v.startDate, "A data final deve ser depois do início")
@@ -47,6 +50,7 @@ const INCLUDE = {
   category: { select: { id: true, name: true, color: true } },
   account: { select: { id: true, name: true } },
   creditCard: { select: { id: true, name: true } },
+  responsible: { select: { id: true, name: true } },
 } as const;
 
 recurrencesRouter.get(
@@ -69,9 +73,11 @@ recurrencesRouter.post(
   ah(async (req: AuthRequest, res) => {
     const v = schema.parse(req.body);
     await checkRefs(req, v);
+    const responsibleId = await resolveResponsible(hid(req), uid(req), v.responsibleId);
     const rec = await prisma.recurrence.create({
       data: {
         ...v,
+        responsibleId,
         householdId: hid(req),
         startDate: d(v.startDate),
         endDate: v.endDate ? d(v.endDate) : null,
@@ -90,13 +96,15 @@ recurrencesRouter.put(
   "/:id",
   ah(async (req: AuthRequest, res) => {
     const id = req.params.id as string;
-    await own(req, id);
+    const old = await own(req, id);
     const v = schema.parse(req.body);
     await checkRefs(req, v);
+    const responsibleId = v.responsibleId === undefined ? old.responsibleId : await resolveResponsible(hid(req), uid(req), v.responsibleId);
     await prisma.recurrence.update({
       where: { id },
       data: {
         ...v,
+        responsibleId,
         startDate: d(v.startDate),
         endDate: v.endDate ? d(v.endDate) : null,
         accountId: v.accountId ?? null,
