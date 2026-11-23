@@ -47,6 +47,30 @@ SELECT pg_temp.expect_fail('orçamento fora do dia 1', $q$INSERT INTO "Budget"(i
 SELECT pg_temp.expect_fail('dia de fechamento 32', $q$INSERT INTO "CreditCard"(id,"householdId",name,"closingDay","dueDay","updatedAt") VALUES ('x','h1','X',32,10,now())$q$);
 
 SELECT pg_temp.expect_fail('conta de outro grupo', $q$INSERT INTO "Account"(id,"householdId",name,"updatedAt") VALUES ('accX','h2','X',now()); INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-01','accX',now())$q$);
+
+-- ── Recorrências: previsto × realizado ──
+-- Netflix no cartão, valor fixo; Energia na conta, valor estimado
+INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","startDate","nextDate","creditCardId","categoryId","updatedAt")
+  VALUES ('recNet','h1','EXPENSE','Netflix',5590,'2026-11-15','2027-01-15','cc1','cExp',now());
+INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","amountIsEstimate","startDate","nextDate","accountId","updatedAt")
+  VALUES ('recLuz','h1','EXPENSE','Energia',18000,true,'2026-11-25','2027-01-25','acc1',now());
+-- Ocorrências geradas como PENDING com o valor previsto
+INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents","expectedAmountCents",date,"occurrenceDate","creditCardId","invoiceId","categoryId","recurrenceId","updatedAt")
+  VALUES ('rn1','h1','EXPENSE','PENDING','Netflix',5590,5590,'2026-11-15','2026-11-15','cc1','inv1','cExp','recNet',now());
+INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents","expectedAmountCents",date,"occurrenceDate","accountId","recurrenceId","updatedAt")
+  VALUES ('rl1','h1','EXPENSE','PENDING','Energia',18000,18000,'2026-11-25','2026-11-25','acc1','recLuz',now());
+-- Fatura com Netflix ainda prevista: total confirmado não muda, projetado sim
+SELECT "totalCents" = 12000 AND "projectedTotalCents" = 17590 AS fatura_previsto_ok FROM invoice_totals WHERE "invoiceId" = 'inv1';
+-- No dia: confirmar a energia com o valor correto, pago dois dias depois
+UPDATE "Transaction" SET status = 'PAID', "amountCents" = 21347, date = '2026-11-27' WHERE id = 'rl1';
+UPDATE "Transaction" SET status = 'PAID' WHERE id = 'rn1';
+SELECT "expectedAmountCents" = 18000 AND "amountCents" = 21347 AND "differenceCents" = 3347 AS variacao_ok FROM recurrence_variance WHERE "transactionId" = 'rl1';
+
+SELECT pg_temp.expect_fail('estimativa gerada já como paga', $q$INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","amountIsEstimate","autoMarkPaid","startDate","nextDate","accountId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,true,true,'2026-11-01','2026-11-01','acc1',now())$q$);
+SELECT pg_temp.expect_fail('ocorrência sem data programada', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","recurrenceId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-01','acc1','recLuz',now())$q$);
+SELECT pg_temp.expect_fail('mesma ocorrência gerada duas vezes', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"occurrenceDate","accountId","recurrenceId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-30','2026-11-25','acc1','recLuz',now())$q$);
+SELECT pg_temp.expect_fail('recorrência no cartão e na conta ao mesmo tempo', $q$INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","startDate","nextDate","accountId","creditCardId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-11-01','2026-11-01','acc1','cc1',now())$q$);
+
 SELECT a.name, b."balanceCents", b."projectedBalanceCents" FROM account_balances b JOIN "Account" a ON a.id=b."accountId" ORDER BY 1;
-SELECT "invoiceId","totalCents","paidCents" FROM invoice_totals;
+SELECT "invoiceId","totalCents","projectedTotalCents","paidCents" FROM invoice_totals;
 ROLLBACK;

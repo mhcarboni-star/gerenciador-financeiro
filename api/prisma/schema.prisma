@@ -259,10 +259,14 @@ model Transaction {
   invoiceId            String?
   categoryId           String?
 
-  installmentPlanId String?
-  installmentNumber Int? /// 1..installmentCount
-  recurrenceId      String?
-  goalId            String? /// aporte/resgate de uma meta
+  installmentPlanId   String?
+  installmentNumber   Int? /// 1..installmentCount
+  recurrenceId        String?
+  /// Data programada da ocorrência na recorrência (não muda se o pagamento for em outro dia)
+  occurrenceDate      DateTime? @db.Date
+  /// Valor previsto quando foi gerado pela recorrência; amountCents guarda o valor real após a confirmação
+  expectedAmountCents Int?
+  goalId              String? /// aporte/resgate de uma meta
 
   createdById String?
   createdAt   DateTime @default(now())
@@ -280,8 +284,9 @@ model Transaction {
   createdBy          User?              @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
 
   @@unique([installmentPlanId, installmentNumber])
-  @@unique([recurrenceId, date]) /// impede gerar a mesma ocorrência duas vezes
+  @@unique([recurrenceId, occurrenceDate]) /// impede gerar a mesma ocorrência duas vezes
   @@index([householdId, date])
+  @@index([householdId, status, date]) /// "previstos para hoje / atrasados"
   @@index([accountId, date])
   @@index([destinationAccountId])
   @@index([invoiceId])
@@ -310,8 +315,10 @@ model InstallmentPlan {
   @@index([householdId])
 }
 
-/// Modelo de lançamento fixo (aluguel, salário, assinatura). A API gera os lançamentos
-/// até um horizonte (ex.: 3 meses à frente) e avança nextDate.
+/// Modelo de lançamento fixo (aluguel, salário, assinatura), em conta ou no cartão.
+/// A API gera os lançamentos até um horizonte (ex.: 3 meses à frente) e avança nextDate.
+/// Fluxo: ocorrência gerada como PENDING com o valor previsto → no dia, o usuário confirma
+/// (status PAID), podendo corrigir valor e data; o previsto fica em expectedAmountCents.
 model Recurrence {
   id                   String          @id @default(cuid())
   householdId          String
@@ -327,7 +334,8 @@ model Recurrence {
   destinationAccountId String?
   creditCardId         String?
   categoryId           String?
-  autoMarkPaid         Boolean         @default(false) /// gerar já como PAID (ex.: débito automático)
+  amountIsEstimate     Boolean         @default(false) /// valor é só previsão (ex.: energia); pedir o valor real ao confirmar
+  autoMarkPaid         Boolean         @default(false) /// gerar já como PAID (ex.: assinatura de valor fixo); não combina com estimativa
   active               Boolean         @default(true)
   createdAt            DateTime        @default(now())
   updatedAt            DateTime        @updatedAt

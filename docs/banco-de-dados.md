@@ -59,7 +59,7 @@ erDiagram
 | `Category` | categorias com 1 nível de subcategoria | `type` (`INCOME`/`EXPENSE`), `parentId` |
 | `Transaction` | toda movimentação | ver abaixo |
 | `InstallmentPlan` | compra parcelada | `totalAmountCents`, `installmentCount`, `firstDate` |
-| `Recurrence` | modelo de lançamento fixo | `frequency`, `interval`, `nextDate`, `autoMarkPaid` |
+| `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
 | `Budget` | limite mensal por categoria | `month` (dia 1), `limitCents` |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
 
@@ -75,8 +75,45 @@ erDiagram
 - `status`: `PENDING` (previsto / a pagar) ou `PAID` (efetivado). Contas a pagar são despesas `PENDING` com `date` = vencimento.
 - Compras no cartão contam como despesa **na data da compra**; o dinheiro sai da conta só no `INVOICE_PAYMENT`.
 - Parcelas: cada parcela é um lançamento com `installmentPlanId` + `installmentNumber` (único por plano).
-- Recorrências: a API gera os lançamentos até um horizonte (ex.: 3 meses) e avança `nextDate`. `(recurrenceId, date)` é único, então rodar a geração duas vezes não duplica.
+- Recorrências: veja a seção abaixo.
 - `createdById`: quem registrou (útil no uso compartilhado).
+
+## Recorrências: previsto × realizado
+
+Uma recorrência (aluguel, salário, energia, assinatura) pode sair de uma **conta** ou de um **cartão de crédito**.
+
+**1. Geração.** A API cria as próximas ocorrências (ex.: 3 meses à frente) como lançamentos `PENDING`:
+
+| Campo | Valor na geração |
+|---|---|
+| `amountCents` e `expectedAmountCents` | valor previsto da recorrência |
+| `date` e `occurrenceDate` | data programada |
+| `invoiceId` (se cartão) | fatura em que a data programada cai |
+
+Se a recorrência tiver `autoMarkPaid` (valor fixo, débito automático), a ocorrência já nasce `PAID`.
+
+**2. No dia: confirmação.** O app lista os lançamentos `PENDING` com `date <= hoje` ("previstos para hoje / atrasados"). Ao confirmar, o usuário pode:
+
+- corrigir o **valor** → muda `amountCents`; `expectedAmountCents` fica com a previsão original;
+- corrigir a **data** → muda `date` (no cartão, a fatura é recalculada); `occurrenceDate` continua com a data programada, o que mantém a sequência da recorrência intacta;
+- opcionalmente, **usar o valor real como nova previsão** → a API atualiza `Recurrence.amountCents` e as ocorrências futuras ainda pendentes.
+
+Status passa para `PAID`.
+
+**3. Outras ações.** *Pular* uma ocorrência = excluí-la (como `nextDate` já avançou, ela não é recriada). *Encerrar* a recorrência = `endDate` ou `active = false`; as ocorrências pendentes futuras são removidas.
+
+| Flag da recorrência | Uso típico | Comportamento |
+|---|---|---|
+| `amountIsEstimate = true` | energia, água, cartão de consumo variável | gera `PENDING`; ao confirmar, o app pede o valor real |
+| `autoMarkPaid = true` | Netflix, aluguel em débito automático | gera já `PAID` |
+| nenhuma | salário, aluguel por boleto | gera `PENDING`; confirmação com o valor sugerido |
+
+`amountIsEstimate` e `autoMarkPaid` não podem estar ligados juntos (estimativa precisa de confirmação).
+
+Efeito nos saldos:
+- **Conta:** `balanceCents` só conta o que foi confirmado; `projectedBalanceCents` inclui as previsões.
+- **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
+- **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
 
 ## Regras garantidas pelo banco
 
@@ -90,6 +127,8 @@ erDiagram
 | Subcategoria só 1 nível, mesmo grupo e tipo do pai | trigger `check_category_parent` |
 | Nome de categoria único por grupo/tipo/nível, ignorando maiúsculas | índice único |
 | Um convite pendente por e-mail por grupo | índice único parcial |
+| Ocorrência de recorrência sempre com data programada; mesma ocorrência não gerada duas vezes | `CHECK` + índice único `(recurrenceId, occurrenceDate)` |
+| Recorrência de valor estimado não pode ser gerada já como paga | `CHECK` |
 
 Teste automatizado dessas regras: [`api/prisma/tests/integridade.sql`](../api/prisma/tests/integridade.sql) (roda numa transação e desfaz tudo).
 
@@ -102,7 +141,8 @@ psql "$DIRECT_URL" -f api/prisma/tests/integridade.sql
 | View | Para quê |
 |---|---|
 | `account_balances` | `balanceCents` (só efetivados) e `projectedBalanceCents` (inclui pendentes) de cada conta |
-| `invoice_totals` | `totalCents` (compras − estornos) e `paidCents` de cada fatura |
+| `invoice_totals` | `totalCents` (compras confirmadas − estornos), `projectedTotalCents` (inclui previstas) e `paidCents` de cada fatura |
+| `recurrence_variance` | previsto × realizado de cada ocorrência de recorrência confirmada |
 
 ## Configurando o Supabase
 
