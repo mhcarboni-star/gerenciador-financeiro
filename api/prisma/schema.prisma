@@ -123,6 +123,7 @@ model Household {
   budgets          Budget[]
   goals            Goal[]
   loans            Loan[]
+  monthPlans       MonthPlan[]
 }
 
 model HouseholdMember {
@@ -389,7 +390,23 @@ model Recurrence {
 
 // ─────────────────────── Planejamento ───────────────────────
 
-/// Limite de gasto de uma categoria em um mês.
+/// Planejamento do mês: quanto o grupo quer guardar. O "disponível para gastar" é calculado:
+/// receitas previstas − compromissos (fixas, parcelas, empréstimos, previstas) − savingsGoalCents.
+model MonthPlan {
+  id               String   @id @default(cuid())
+  householdId      String
+  month            DateTime @db.Date /// dia 1 do mês
+  savingsGoalCents Int      @default(0)
+  notes            String?
+  createdAt        DateTime @default(now())
+  updatedAt        DateTime @updatedAt
+
+  household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
+
+  @@unique([householdId, month])
+}
+
+/// Limite de gasto do dia a dia de uma categoria principal em um mês (parte do planejamento).
 model Budget {
   id          String   @id @default(cuid())
   householdId String

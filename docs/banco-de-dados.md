@@ -60,7 +60,8 @@ erDiagram
 | `Transaction` | toda movimentação | ver abaixo |
 | `InstallmentPlan` | compra parcelada | `totalAmountCents`, `installmentCount`, `firstDate` |
 | `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
-| `Budget` | limite mensal por categoria | `month` (dia 1), `limitCents` |
+| `Budget` | limite mensal de gastos do dia a dia por categoria principal | `month` (dia 1), `limitCents` |
+| `MonthPlan` | planejamento do mês | `month` (dia 1), `savingsGoalCents` (quanto quer guardar) |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
 | `Loan` | empréstimo que o usuário pegou | `principalCents`, `interestType`, `monthlyRate`, `installmentCount`, `firstDueDate`, `status` |
 | `PushSubscription` | aparelho que recebe aviso (Web Push) | `endpoint` (único), `p256dh`, `auth`, `failureCount` |
@@ -120,6 +121,33 @@ Efeito nos saldos:
 - **Conta:** `balanceCents` só conta o que foi confirmado; `projectedBalanceCents` inclui as previsões.
 - **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
 - **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
+
+## Planejamento do mês: quanto posso gastar
+
+Tela **Planejar** (padrão: mês seguinte). O cálculo usa o **regime de caixa**, ou seja, quando o dinheiro sai da conta:
+
+- **Contas:** pela data do lançamento.
+- **Cartão:** pelo **vencimento da fatura**. Uma compra feita em novembro numa fatura que vence em dezembro pesa no planejamento de dezembro.
+
+Cada saída do mês é classificada como:
+
+| Classe | O que entra |
+|---|---|
+| **Compromisso** | ocorrências de recorrência (contas fixas), parcelas, parcelas de empréstimo e previsões cadastradas (lançamentos `PENDING` avulsos, ex.: IPVA) |
+| **Gasto do dia a dia** | compras avulsas (consomem o disponível conforme acontecem) |
+
+```
+Disponível para gastar = receitas previstas − compromissos − quanto quero guardar (MonthPlan.savingsGoalCents)
+Resta                  = disponível − gastos do dia a dia já feitos
+Por dia                = resta ÷ dias que faltam no mês (mês futuro: o mês inteiro)
+```
+
+- A sobra do mês anterior **não** entra no disponível; fica como reserva nas contas.
+- **Limites por categoria** (`Budget`) dividem o disponível entre as categorias principais. Os gastos das subcategorias somam na principal. Só os gastos do dia a dia contam nesses limites, porque os compromissos já foram descontados.
+- "Copiar do mês anterior" copia os limites e a meta de guardar.
+- Estorno no cartão reduz o gasto do dia a dia.
+
+Cálculo em [`api/src/lib/plan.ts`](../api/src/lib/plan.ts), com testes em `api/test/plan.test.ts`. Rotas: `GET /api/plan?month=`, `PUT /api/plan/:month` (meta de guardar), `PUT /api/plan/:month/orcamentos`, `POST /api/plan/:month/copiar-anterior`.
 
 ## Empréstimos
 

@@ -193,6 +193,43 @@ export interface LoanPaymentInput {
   accountId: string;
 }
 
+export type CommitmentKind = "FIXED" | "INSTALLMENT" | "LOAN" | "PLANNED";
+
+export interface PlanItem {
+  id: string;
+  type: "INCOME" | "EXPENSE" | "LOAN_PAYMENT";
+  status: "PAID" | "PENDING";
+  description: string;
+  amountCents: number;
+  date: string;
+  cashDate: string;
+  viaCard: boolean;
+  sourceName: string | null;
+  kind?: CommitmentKind;
+}
+
+export interface MonthPlan {
+  month: string;
+  today: string;
+  incomeCents: number;
+  commitmentsCents: number;
+  commitmentsByKind: Record<CommitmentKind, number>;
+  savingsGoalCents: number;
+  availableCents: number;
+  variableSpentCents: number;
+  remainingCents: number;
+  cardCarryCents: number;
+  perDayCents: number;
+  daysLeft: number;
+  incomes: PlanItem[];
+  commitments: PlanItem[];
+  budgetedCents: number;
+  unbudgetedCents: number;
+  canCopyBudgets: boolean;
+  budgets: { categoryId: string; name: string; color: string; limitCents: number | null; spentCents: number }[];
+  uncategorizedSpentCents: number;
+}
+
 export interface Pending {
   today: string;
   overdue: Transaction[];
@@ -235,6 +272,7 @@ export interface TransactionInput {
   notes: string | null;
   accountId: string | null;
   creditCardId: string | null;
+  status?: "PAID" | "PENDING";
 }
 
 export interface Summary {
@@ -362,6 +400,13 @@ export const api = {
     a.remove();
     setTimeout(() => URL.revokeObjectURL(url), 10_000);
   },
+
+  plan: (month: string) => request<MonthPlan>(`/plan?month=${month}`),
+  setSavingsGoal: (month: string, savingsGoalCents: number) =>
+    request<{ ok: true }>(`/plan/${month}`, { method: "PUT", body: json({ savingsGoalCents }) }),
+  setBudgets: (month: string, items: { categoryId: string; limitCents: number | null }[]) =>
+    request<{ ok: true }>(`/plan/${month}/orcamentos`, { method: "PUT", body: json({ items }) }),
+  copyPreviousPlan: (month: string) => request<{ copied: number }>(`/plan/${month}/copiar-anterior`, { method: "POST" }),
 
   summary: (month: string) => request<Summary>(`/summary?month=${month}`),
 };

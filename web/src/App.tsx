@@ -10,6 +10,7 @@ import { CardPage } from "./pages/CardPage";
 import { RecurrencesPage } from "./pages/RecurrencesPage";
 import { LoansPage } from "./pages/LoansPage";
 import { LoanPage } from "./pages/LoanPage";
+import { PlanPage } from "./pages/PlanPage";
 
 export function App() {
   const { user, loading } = useAuth();
@@ -33,6 +34,7 @@ export function App() {
         <Route path="/contas" element={<AccountsPage />} />
         <Route path="/cartoes/:id" element={<CardPage />} />
         <Route path="/recorrencias" element={<RecurrencesPage />} />
+        <Route path="/planejamento" element={<PlanPage />} />
         <Route path="/emprestimos" element={<LoansPage />} />
         <Route path="/emprestimos/:id" element={<LoanPage />} />
         <Route path="/categorias" element={<CategoriesPage />} />

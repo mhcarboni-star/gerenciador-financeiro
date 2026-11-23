@@ -1,8 +1,8 @@
 import { useCallback, useEffect, useState } from "react";
 import { Link } from "react-router-dom";
-import { api, type Pending, type Summary, type Transaction } from "../api";
+import { api, type MonthPlan, type Pending, type Summary, type Transaction } from "../api";
 import { PendingPanel } from "../components/PendingPanel";
-import { currentMonth, money } from "../format";
+import { currentMonth, monthLabel, money, shiftMonth } from "../format";
 import { MonthPicker } from "../components/MonthPicker";
 import { TransactionList } from "../components/TransactionList";
 import { useTransactionEditor } from "../useTransactionEditor";
@@ -14,6 +14,8 @@ export function DashboardPage() {
   const [summary, setSummary] = useState<Summary | null>(null);
   const [recent, setRecent] = useState<Transaction[]>([]);
   const [pending, setPending] = useState<Pending | null>(null);
+  const [plan, setPlan] = useState<MonthPlan | null>(null);
+  const [nextPlan, setNextPlan] = useState<MonthPlan | null>(null);
   const [error, setError] = useState("");
 
   const load = useCallback(() => {
@@ -28,6 +30,10 @@ export function DashboardPage() {
   }, [month]);
 
   useEffect(load, [load]);
+  useEffect(() => {
+    api.plan(currentMonth()).then(setPlan).catch(() => {});
+    api.plan(shiftMonth(currentMonth(), 1)).then(setNextPlan).catch(() => {});
+  }, [recent]);
   const editor = useTransactionEditor(load);
 
   const expenses = summary?.byCategory.filter((c) => c.type === "EXPENSE") ?? [];
@@ -46,6 +52,25 @@ export function DashboardPage() {
       {error && <p className="error">{error}</p>}
 
       <PendingPanel data={pending} onConfirm={editor.openConfirm} />
+
+      {plan && nextPlan && (
+        <section className="plan-cards">
+          <Link to={`/planejamento?mes=${plan.month}`} className={`card plan-mini ${plan.remainingCents < 0 ? "over" : ""}`}>
+            <span className="muted small">Ainda posso gastar em {monthLabel(plan.month).split(" ")[0].toLowerCase()}</span>
+            <strong className={plan.remainingCents < 0 ? "neg" : ""}>{money(plan.remainingCents)}</strong>
+            <span className="muted small">
+              {plan.incomeCents === 0
+                ? "Cadastre suas receitas previstas ›"
+                : `${plan.remainingCents >= 0 && plan.daysLeft > 0 ? `≈ ${money(plan.perDayCents)}/dia · ` : ""}de ${money(plan.availableCents)}`}
+            </span>
+          </Link>
+          <Link to={`/planejamento?mes=${nextPlan.month}`} className="card plan-mini">
+            <span className="muted small">Posso gastar em {monthLabel(nextPlan.month).split(" ")[0].toLowerCase()}</span>
+            <strong className={nextPlan.availableCents < 0 ? "neg" : ""}>{money(nextPlan.availableCents)}</strong>
+            <span className="muted small">Planejar próximo mês ›</span>
+          </Link>
+        </section>
+      )}
 
       <section className="stats">
         <div className="card stat">

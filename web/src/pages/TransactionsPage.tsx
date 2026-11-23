@@ -43,7 +43,10 @@ export function TransactionsPage() {
       <header className="page-head">
         <div>
           <h1>Lançamentos</h1>
-          <Link to="/recorrencias" className="small">Recorrentes ›</Link>
+          <span className="small links">
+            <Link to="/recorrencias">Recorrentes ›</Link>
+            <Link to="/categorias">Categorias ›</Link>
+          </span>
         </div>
         <MonthPicker value={month} onChange={setMonth} />
       </header>
