@@ -1,3 +1,5 @@
+-- OBSOLETO: o bloqueio agora é aplicado automaticamente pela migração
+-- 20261123090000_seguranca_funcoes_e_rls. Mantido apenas como referência.
 -- Rode no SQL Editor do Supabase depois de aplicar as migrações (e após cada migração que criar tabelas).
 -- Ativa RLS sem políticas: bloqueia o acesso pela API pública do Supabase (chaves anon/authenticated).
 -- A API do app conecta direto no Postgres com o usuário dono das tabelas e não é afetada.

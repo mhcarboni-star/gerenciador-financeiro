@@ -55,6 +55,10 @@ npm start      # aplica migrações e sobe tudo na porta $PORT
 
 Variáveis de ambiente: `DATABASE_URL`, `DIRECT_URL`, `JWT_SECRET` (valor longo e aleatório) e, opcionalmente, `PORT`.
 
+### No ar
+
+Produção: Render (região Virginia) + Supabase (us-east-1). Cada envio para a `main` publica automaticamente; as migrações rodam na inicialização.
+
 ### Banco no Supabase
 
 Siga o passo a passo em [docs/banco-de-dados.md → Configurando o Supabase](docs/banco-de-dados.md#configurando-o-supabase).
