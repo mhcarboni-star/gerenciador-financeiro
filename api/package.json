@@ -10,7 +10,8 @@
     "db:migrate": "prisma migrate dev",
     "typecheck": "tsc -p tsconfig.json --noEmit",
     "db:deploy": "prisma migrate deploy",
-    "db:test": "psql \"$DIRECT_URL\" -f prisma/tests/integridade.sql"
+    "db:test": "psql \"$DIRECT_URL\" -f prisma/tests/integridade.sql",
+    "test": "node --import tsx --test test/*.test.ts"
   },
   "dependencies": {
     "@prisma/client": "^6.19.3",

@@ -10,4 +10,4 @@ BEGIN
 END $$;
 
 -- Views rodam com as permissões do dono; tire o acesso das roles públicas.
-REVOKE ALL ON public.account_balances, public.invoice_totals, public.recurrence_variance FROM anon, authenticated;
+REVOKE ALL ON public.account_balances, public.invoice_totals, public.recurrence_variance, public.loan_balances FROM anon, authenticated;

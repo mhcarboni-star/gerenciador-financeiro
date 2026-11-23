@@ -62,6 +62,7 @@ erDiagram
 | `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
 | `Budget` | limite mensal por categoria | `month` (dia 1), `limitCents` |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
+| `Loan` | empréstimo que o usuário pegou | `principalCents`, `interestType`, `monthlyRate`, `installmentCount`, `firstDueDate`, `status` |
 | `PushSubscription` | aparelho que recebe aviso (Web Push) | `endpoint` (único), `p256dh`, `auth`, `failureCount` |
 | `NotificationSettings` | preferências de aviso do usuário | `dueItemsEnabled`, `includeOverdue`, `sendHour`, `timezone` |
 | `NotificationLog` | avisos enviados | único por `(userId, kind, referenceDate)` |
@@ -74,6 +75,8 @@ erDiagram
 | `EXPENSE` | saída | `accountId` **ou** (`creditCardId` + `invoiceId`) | sim (despesa) |
 | `TRANSFER` | conta → conta | `accountId` (origem) + `destinationAccountId` | não |
 | `INVOICE_PAYMENT` | paga fatura | `accountId` + `invoiceId` | não (as compras já contaram) |
+| `LOAN_RECEIPT` | dinheiro do empréstimo entrando na conta | `accountId` + `loanId` | não (é dívida, não receita) |
+| `LOAN_PAYMENT` | pagamento de empréstimo | `accountId` + `loanId`; divisão em `loanPrincipalCents` + `loanInterestCents` | não; aparece à parte como "Empréstimos" (os juros pagos ficam visíveis) |
 
 - `status`: `PENDING` (previsto / a pagar) ou `PAID` (efetivado). Contas a pagar são despesas `PENDING` com `date` = vencimento.
 - Compras no cartão contam como despesa **na data da compra**; o dinheiro sai da conta só no `INVOICE_PAYMENT`.
@@ -117,6 +120,47 @@ Efeito nos saldos:
 - **Conta:** `balanceCents` só conta o que foi confirmado; `projectedBalanceCents` inclui as previsões.
 - **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
 - **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
+
+## Empréstimos
+
+Aba para os empréstimos que **você pegou** (banco, consignado, financiamento, parente). Você lança o valor emprestado; o app gera as parcelas, registra os pagamentos e mostra o **saldo devedor** sempre atualizado.
+
+### Tipo de juros (escolhido por empréstimo)
+
+| `interestType` | Uso típico | Como o saldo é calculado |
+|---|---|---|
+| `NONE` | dinheiro de parente/amigo | saldo = valor emprestado − soma dos pagamentos |
+| `PRICE` | banco, consignado, financiamento | parcelas fixas (Tabela Price) com `monthlyRate` e `installmentCount`; cada parcela = juros do mês sobre o saldo + amortização |
+| `MONTHLY_ON_BALANCE` | cheque especial, acordo com juros, empréstimo sem parcelas fixas | juros compostos mensais sobre o saldo, pró-rata por dia desde o último pagamento; pagamentos livres |
+
+`monthlyRate` é a taxa mensal como fração (1,99% a.m. = `0.0199`).
+
+### Fluxo
+
+1. **Cadastro.** Informe nome, credor, valor, tipo de juros, taxa, nº de parcelas e 1º vencimento.
+   - Se o dinheiro entrou numa conta (`receivedAccountId`), é criado um `LOAN_RECEIPT`, que aumenta o saldo da conta sem contar como receita.
+   - Se o empréstimo tiver plano de parcelas, elas são criadas como `LOAN_PAYMENT` `PENDING`, com `loanInstallmentNumber`, valor previsto (`expectedAmountCents`) e divisão prevista entre juros e amortização.
+2. **No dia.** A parcela aparece no **aviso do celular** e na lista "para confirmar", como as recorrências. Ao confirmar, você pode corrigir valor e data; a API recalcula a divisão entre juros e amortização.
+3. **Pagamento avulso ou antecipado.** É um `LOAN_PAYMENT` sem número de parcela. Na Price, a antecipação amortiza 100%. Depois, a API recalcula as parcelas restantes com o novo saldo (parcela menor, mesmo prazo).
+4. **Quitação.** Quando o saldo devedor chega a zero, o empréstimo vai para `PAID_OFF` com `paidOffAt`, e as parcelas pendentes que sobraram são removidas.
+
+### Saldo devedor
+
+A view `loan_balances` mostra, por empréstimo:
+
+| Coluna | Significado |
+|---|---|
+| `principalOutstandingCents` | principal ainda devido (valor − amortizações confirmadas) |
+| `accruedInterestCents` | juros acumulados desde o último pagamento até hoje (zero se sem juros) |
+| `totalPaidCents` / `interestPaidCents` | total pago e quanto disso foi juros |
+| `paidInstallments` / `pendingInstallments` / `pendingAmountCents` | parcelas pagas, a pagar e quanto falta pagar pelo plano |
+| `nextDueDate` / `lastPaymentDate` | próximo vencimento e último pagamento |
+
+**Saldo devedor hoje** = `principalOutstandingCents` + `accruedInterestCents`. É o valor aproximado para quitar hoje; o valor exato de quitação é informado pelo credor.
+
+Os cálculos (tabela Price, divisão de cada pagamento, recálculo após antecipação, juros pró-rata) ficam em [`api/src/lib/loans.ts`](../api/src/lib/loans.ts), com testes em `api/test/loans.test.ts` (`npm test --workspace api`).
+
+Exemplo verificado nos testes: R$ 10.000 a 2% a.m. em 12x → parcela de **R$ 945,60** (1ª: R$ 200,00 de juros + R$ 745,60 de amortização). Pagando a 1ª parcela e antecipando R$ 2.000, o saldo de principal fica em **R$ 7.254,40**.
 
 ## Avisos no celular: contas do dia
 
@@ -169,6 +213,9 @@ No uso compartilhado, cada membro escolhe por grupo (`HouseholdMember.notifyDueI
 | Recorrência de valor estimado não pode ser gerada já como paga | `CHECK` |
 | No máximo um aviso por usuário, tipo e dia; aparelho não duplicado | índices únicos |
 | Hora do aviso entre 0 e 23, fuso em formato IANA, endpoint de push `https://` | `CHECK` |
+| Lançamento de empréstimo sempre ligado a um empréstimo do mesmo grupo e a uma conta; outros tipos nunca ligados a empréstimo | `CHECK tx_shape_by_type` + trigger |
+| Amortização + juros = valor pago; juros ≥ 0; parcela do empréstimo não duplicada | `CHECK` + índice único |
+| Empréstimo: valor > 0; Price exige taxa e nº de parcelas; sem juros não tem taxa; quitado tem data de quitação | `CHECK` |
 
 Teste automatizado dessas regras: [`api/prisma/tests/integridade.sql`](../api/prisma/tests/integridade.sql) (roda numa transação e desfaz tudo).
 
@@ -183,6 +230,7 @@ psql "$DIRECT_URL" -f api/prisma/tests/integridade.sql
 | `account_balances` | `balanceCents` (só efetivados) e `projectedBalanceCents` (inclui pendentes) de cada conta |
 | `invoice_totals` | `totalCents` (compras confirmadas − estornos), `projectedTotalCents` (inclui previstas) e `paidCents` de cada fatura |
 | `recurrence_variance` | previsto × realizado de cada ocorrência de recorrência confirmada |
+| `loan_balances` | situação e saldo devedor de cada empréstimo (ver seção Empréstimos) |
 
 Função `due_items_for_user(userId, data)`: lançamentos pendentes até a data, nos grupos em que o usuário quer aviso, com a marca de atrasado.
 

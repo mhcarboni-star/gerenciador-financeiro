@@ -89,6 +89,39 @@ SELECT pg_temp.expect_fail('fuso horário inválido', $q$UPDATE "NotificationSet
 SELECT pg_temp.expect_fail('aparelho com endpoint sem https', $q$INSERT INTO "PushSubscription"(id,"userId",endpoint,p256dh,auth) VALUES ('x','u1','http://inseguro','k','a')$q$);
 SELECT pg_temp.expect_fail('aparelho duplicado', $q$INSERT INTO "PushSubscription"(id,"userId",endpoint,p256dh,auth) VALUES ('x','u2','https://push.example/abc','k','a')$q$);
 
+
+-- ── Empréstimos ──
+-- R$ 10.000 a 2% a.m. em 12x (Price), recebido na conta corrente em 10/11, 1ª parcela 10/12
+INSERT INTO "Loan"(id,"householdId",name,lender,"principalCents","interestType","monthlyRate","installmentCount","startDate","firstDueDate","receivedAccountId","paymentAccountId","updatedAt")
+  VALUES ('loan1','h1','Empréstimo pessoal','Banco X',1000000,'PRICE',0.02,12,'2026-11-10','2026-12-10','acc1','acc1',now());
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","updatedAt")
+  VALUES ('lr1','h1','LOAN_RECEIPT','Empréstimo pessoal',1000000,'2026-11-10','acc1','loan1',now());
+-- Parcelas previstas (geradas pela API a partir da tabela Price)
+INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents","expectedAmountCents",date,"occurrenceDate","accountId","loanId","loanInstallmentNumber","loanPrincipalCents","loanInterestCents","updatedAt") VALUES
+  ('lp1','h1','LOAN_PAYMENT','PENDING','Parcela 1/12',94560,94560,'2026-12-10','2026-12-10','acc1','loan1',1,74560,20000,now()),
+  ('lp2','h1','LOAN_PAYMENT','PENDING','Parcela 2/12',94560,94560,'2027-01-10','2027-01-10','acc1','loan1',2,76051,18509,now());
+SELECT "principalOutstandingCents" = 1000000 AND "pendingInstallments" = 2 AND "nextDueDate" = '2026-12-10' AS emprestimo_inicio_ok FROM loan_balances WHERE "loanId" = 'loan1';
+-- Parcela 1 aparece no aviso do dia 10/12
+SELECT count(*) = 1 AS parcela_no_aviso_ok FROM due_items_for_user('u1','2026-12-10') WHERE "transactionId" = 'lp1';
+-- Confirmar a parcela 1 e fazer uma antecipação avulsa de R$ 2.000 (amortiza tudo)
+UPDATE "Transaction" SET status = 'PAID' WHERE id = 'lp1';
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","loanPrincipalCents","loanInterestCents","updatedAt")
+  VALUES ('la1','h1','LOAN_PAYMENT','Antecipação',200000,'2026-12-20','acc1','loan1',200000,0,now());
+SELECT "principalOutstandingCents" = 725440 AND "totalPaidCents" = 294560 AND "interestPaidCents" = 20000 AND "paidInstallments" = 1
+  AS saldo_devedor_ok FROM loan_balances WHERE "loanId" = 'loan1';
+
+SELECT pg_temp.expect_fail('pagamento sem empréstimo', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-12-01','acc1',now())$q$);
+SELECT pg_temp.expect_fail('despesa comum ligada a empréstimo', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","updatedAt") VALUES ('x','h1','EXPENSE','x',1,'2026-12-01','acc1','loan1',now())$q$);
+SELECT pg_temp.expect_fail('amortização + juros diferente do valor', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","loanPrincipalCents","loanInterestCents","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1000,'2026-12-01','acc1','loan1',500,400,now())$q$);
+SELECT pg_temp.expect_fail('juros negativos', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","loanPrincipalCents","loanInterestCents","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1000,'2026-12-01','acc1','loan1',1100,-100,now())$q$);
+SELECT pg_temp.expect_fail('parcela do empréstimo duplicada', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","loanInstallmentNumber","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-12-01','acc1','loan1',2,now())$q$);
+SELECT pg_temp.expect_fail('Price sem número de parcelas', $q$INSERT INTO "Loan"(id,"householdId",name,"principalCents","interestType","monthlyRate","startDate","updatedAt") VALUES ('x','h1','x',100,'PRICE',0.02,'2026-11-01',now())$q$);
+SELECT pg_temp.expect_fail('sem juros com taxa', $q$INSERT INTO "Loan"(id,"householdId",name,"principalCents","interestType","monthlyRate","startDate","updatedAt") VALUES ('x','h1','x',100,'NONE',0.02,'2026-11-01',now())$q$);
+SELECT pg_temp.expect_fail('quitado sem data de quitação', $q$UPDATE "Loan" SET status = 'PAID_OFF' WHERE id = 'loan1'$q$);
+SELECT pg_temp.expect_fail('empréstimo de outro grupo', $q$INSERT INTO "Loan"(id,"householdId",name,"principalCents","startDate","updatedAt") VALUES ('loanX','h2','x',100,'2026-11-01',now()); INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-12-01','acc1','loanX',now())$q$);
+SELECT pg_temp.expect_fail('recorrência de pagamento de empréstimo', $q$INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","startDate","nextDate","accountId","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-11-01','2026-11-01','acc1',now())$q$);
+
 SELECT a.name, b."balanceCents", b."projectedBalanceCents" FROM account_balances b JOIN "Account" a ON a.id=b."accountId" ORDER BY 1;
 SELECT "invoiceId","totalCents","projectedTotalCents","paidCents" FROM invoice_totals;
+SELECT "loanId","principalOutstandingCents","totalPaidCents","interestPaidCents","pendingInstallments","nextDueDate" FROM loan_balances WHERE "loanId" = 'loan1';
 ROLLBACK;
