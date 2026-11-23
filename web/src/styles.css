@@ -394,3 +394,15 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .plan-mini:hover { border-color: var(--primary); }
 .plan-mini.over { border-color: var(--neg); }
 .links { display: inline-flex; gap: 12px; }
+
+/* ---------- Ajuste de saldo ---------- */
+.adjust-cta { display: flex; align-items: center; justify-content: space-between; gap: 12px; padding: 10px 12px; border: 1px solid var(--border); border-radius: 10px; }
+.adjust-cta > div, .adjust-preview > div { display: flex; flex-direction: column; gap: 2px; }
+.adjust-preview { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; padding: 12px; border-radius: 10px; background: var(--bg); }
+.adjust-preview strong { font-variant-numeric: tabular-nums; }
+.info.warn { border-color: #fcd34d; background: #fffbeb; color: #92400e; }
+@media (prefers-color-scheme: dark) { .info.warn { background: #451a03; color: #fcd34d; border-color: #92400e; } }
+/* selos nunca são cortados: a descrição encolhe antes */
+.tx-desc { display: flex; align-items: center; min-width: 0; }
+.tx-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.tx-desc .badge, .tx-desc .tag { flex: none; }

@@ -11,6 +11,7 @@ Aplicação web para controle financeiro pessoal. Funciona no celular e no PC co
 - Resumo do mês: receitas, despesas, saldo do mês e saldo acumulado
 - Gráfico de despesas por categoria
 - Filtro e busca de lançamentos, navegação entre meses
+- **Ajuste de saldo** para bater com o extrato; lançamentos com data anterior ao ajuste ficam só registrados
 - Categorias personalizáveis (já vem com um conjunto padrão)
 - Tema claro e escuro automático
 
@@ -81,6 +82,8 @@ Todas as rotas (exceto `/api/auth/register` e `/api/auth/login`) exigem `Authori
 | GET/POST/PUT | `/api/recurrences[/:id]` | Lançamentos recorrentes |
 | POST | `/api/recurrences/:id/encerrar` | Encerra uma recorrência |
 | GET/POST/PUT/DELETE | `/api/accounts[/:id]` | Contas com saldo atual e previsto |
+| GET | `/api/accounts/:id/saldo?data=` | Saldo da conta numa data |
+| POST | `/api/accounts/:id/ajustar-saldo` | Ajusta o saldo (lança a diferença e cria o marco) |
 | GET/POST/PUT/DELETE | `/api/cards[/:id]` | Cartões com limite e fatura atual |
 | GET | `/api/invoices/card/:cardId`, `/api/invoices/:id` | Faturas de um cartão / detalhe |
 | POST | `/api/invoices/:id/pagar` | Paga a fatura (total ou parcial) |

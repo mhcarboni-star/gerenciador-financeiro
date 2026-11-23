@@ -28,17 +28,9 @@ summaryRouter.get(
         _sum: { amountCents: true },
       }),
       prisma.category.findMany({ where: { householdId } }),
+      // Saldo real das contas no último dia do mês (respeita os ajustes de saldo).
       prisma.$queryRaw<{ total: bigint | null }[]>`
-        SELECT SUM(a."initialBalanceCents") + COALESCE((
-          SELECT SUM(CASE
-                       WHEN t."type" IN ('INCOME','LOAN_RECEIPT') AND t."accountId" = a2.id THEN t."amountCents"
-                       WHEN t."type" = 'TRANSFER' AND t."destinationAccountId" = a2.id THEN t."amountCents"
-                       WHEN t."accountId" = a2.id THEN -t."amountCents"
-                       ELSE 0 END)
-          FROM "Transaction" t JOIN "Account" a2 ON a2.id IN (t."accountId", t."destinationAccountId")
-          WHERE a2."householdId" = ${householdId} AND a2."includeInTotals"
-            AND t.status = 'PAID' AND t.date < ${range.lt}
-        ), 0) AS total
+        SELECT SUM(account_balance_on(a.id, (${range.lt}::date - 1), false)) AS total
         FROM "Account" a
         WHERE a."householdId" = ${householdId} AND a."includeInTotals"`,
     ]);

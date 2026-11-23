@@ -89,6 +89,8 @@ function ReadOnly({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void })
   const [busy, setBusy] = useState(false);
   const [error, setError] = useState("");
   const isInvoice = tx.type === "INVOICE_PAYMENT";
+  const isAdjustment = tx.type === "ADJUSTMENT_IN" || tx.type === "ADJUSTMENT_OUT";
+  const canDelete = isInvoice || isAdjustment;
   return (
     <div className="form">
       <div className="confirm-head">
@@ -100,16 +102,19 @@ function ReadOnly({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void })
       <p className="info">
         {isInvoice
           ? "Pagamento de fatura do cartão. Não entra nas despesas do mês, porque as compras já entraram."
-          : "Pagamento de empréstimo. Edite na aba Empréstimos."}
+          : isAdjustment
+            ? `Ajuste de saldo (${tx.type === "ADJUSTMENT_IN" ? "entrada" : "saída"}). Não é receita nem despesa. Excluir o ajuste faz o saldo voltar a considerar os lançamentos anteriores a ele.`
+            : "Pagamento de empréstimo. Edite na aba Empréstimos."}
       </p>
       {error && <p className="error">{error}</p>}
-      {isInvoice && (
+      {tx.notes && isAdjustment && <span className="muted small">{tx.notes}</span>}
+      {canDelete && (
         <div className="actions">
           <button
             className="btn danger-ghost"
             disabled={busy}
             onClick={async () => {
-              if (!confirm("Excluir este pagamento? A fatura volta a ficar em aberto.")) return;
+              if (!confirm(isAdjustment ? "Excluir este ajuste de saldo?" : "Excluir este pagamento? A fatura volta a ficar em aberto.")) return;
               setBusy(true);
               try {
                 await api.deleteTransaction(tx.id);
@@ -120,7 +125,7 @@ function ReadOnly({ tx, onDeleted }: { tx: Transaction; onDeleted: () => void })
               }
             }}
           >
-            Excluir pagamento
+            {isAdjustment ? "Excluir ajuste" : "Excluir pagamento"}
           </button>
         </div>
       )}

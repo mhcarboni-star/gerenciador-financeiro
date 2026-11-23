@@ -47,6 +47,8 @@ enum TransactionType {
   INVOICE_PAYMENT // pagamento de fatura: conta → cartão (não é despesa; as compras já foram)
   LOAN_RECEIPT // dinheiro do empréstimo entrando na conta (não é receita)
   LOAN_PAYMENT // pagamento de empréstimo: amortização + juros
+  ADJUSTMENT_IN // ajuste de saldo para mais (não é receita)
+  ADJUSTMENT_OUT // ajuste de saldo para menos (não é despesa)
 }
 
 enum LoanInterestType {
@@ -179,15 +181,16 @@ model Account {
   household Household @relation(fields: [householdId], references: [id], onDelete: Cascade)
   owner     User?     @relation("AccountOwner", fields: [ownerId], references: [id], onDelete: SetNull)
 
-  transactions        Transaction[]     @relation("TxAccount")
-  incomingTransfers   Transaction[]     @relation("TxDestination")
+  transactions        Transaction[]       @relation("TxAccount")
+  incomingTransfers   Transaction[]       @relation("TxDestination")
   cardsPaidFromHere   CreditCard[]
-  recurrences         Recurrence[]      @relation("RecAccount")
-  recurrenceTransfers Recurrence[]      @relation("RecDestination")
+  recurrences         Recurrence[]        @relation("RecAccount")
+  recurrenceTransfers Recurrence[]        @relation("RecDestination")
   installmentPlans    InstallmentPlan[]
   goals               Goal[]
-  loansReceived       Loan[]            @relation("LoanReceivedAccount")
-  loansPaidFromHere   Loan[]            @relation("LoanPaymentAccount")
+  balanceCheckpoints  BalanceCheckpoint[]
+  loansReceived       Loan[]              @relation("LoanReceivedAccount")
+  loansPaidFromHere   Loan[]              @relation("LoanPaymentAccount")
 
   @@index([householdId])
 }
@@ -305,8 +308,11 @@ model Transaction {
   loanInterestCents     Int?
 
   createdById String?
-  createdAt   DateTime @default(now())
-  updatedAt   DateTime @updatedAt
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+  /// Quando o lançamento passou a PAID (preenchido pelo banco). Usado pela regra do ajuste
+  /// de saldo: no dia do ajuste, só conta o que foi efetivado depois dele.
+  paidAt      DateTime?
 
   household          Household          @relation(fields: [householdId], references: [id], onDelete: Cascade)
   account            Account?           @relation("TxAccount", fields: [accountId], references: [id], onDelete: Restrict)
@@ -319,6 +325,7 @@ model Transaction {
   goal               Goal?              @relation(fields: [goalId], references: [id], onDelete: SetNull)
   loan               Loan?              @relation(fields: [loanId], references: [id], onDelete: Cascade)
   createdBy          User?              @relation("TransactionCreator", fields: [createdById], references: [id], onDelete: SetNull)
+  balanceCheckpoint  BalanceCheckpoint?
 
   @@unique([installmentPlanId, installmentNumber])
   @@unique([loanId, loanInstallmentNumber])
@@ -444,6 +451,26 @@ model Goal {
   transactions Transaction[]
 
   @@index([householdId])
+}
+
+// ─────────────────────── Ajuste de saldo ───────────────────────
+
+/// Marco de saldo de uma conta: "em `date`, o saldo real era `balanceCents`".
+/// O saldo passa a partir daqui; lançamentos com data anterior (ou do mesmo dia, mas
+/// registrados antes do ajuste) ficam só no histórico e não mudam o saldo.
+/// O lançamento de ajuste (ADJUSTMENT_IN/OUT) registra a diferença encontrada.
+model BalanceCheckpoint {
+  id            String   @id @default(cuid())
+  accountId     String
+  date          DateTime @db.Date
+  balanceCents  Int
+  transactionId String?  @unique /// lançamento do ajuste (null quando a diferença era zero)
+  createdAt     DateTime @default(now())
+
+  account     Account      @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  transaction Transaction? @relation(fields: [transactionId], references: [id], onDelete: Cascade)
+
+  @@index([accountId, date])
 }
 
 // ─────────────────────── Empréstimos ───────────────────────

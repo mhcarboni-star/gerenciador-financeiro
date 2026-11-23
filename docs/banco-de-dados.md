@@ -61,6 +61,7 @@ erDiagram
 | `InstallmentPlan` | compra parcelada | `totalAmountCents`, `installmentCount`, `firstDate` |
 | `Recurrence` | modelo de lançamento fixo, em conta **ou no cartão** | `frequency`, `interval`, `nextDate`, `amountIsEstimate`, `autoMarkPaid` |
 | `Budget` | limite mensal de gastos do dia a dia por categoria principal | `month` (dia 1), `limitCents` |
+| `BalanceCheckpoint` | marco de saldo de uma conta (ajuste de saldo) | `date`, `balanceCents`, `transactionId` (o lançamento do ajuste) |
 | `MonthPlan` | planejamento do mês | `month` (dia 1), `savingsGoalCents` (quanto quer guardar) |
 | `Goal` | meta de economia | `targetCents`, `initialCents`, `targetDate`, `accountId` |
 | `Loan` | empréstimo que o usuário pegou | `principalCents`, `interestType`, `monthlyRate`, `installmentCount`, `firstDueDate`, `status` |
@@ -76,6 +77,7 @@ erDiagram
 | `EXPENSE` | saída | `accountId` **ou** (`creditCardId` + `invoiceId`) | sim (despesa) |
 | `TRANSFER` | conta → conta | `accountId` (origem) + `destinationAccountId` | não |
 | `INVOICE_PAYMENT` | paga fatura | `accountId` + `invoiceId` | não (as compras já contaram) |
+| `ADJUSTMENT_IN` / `ADJUSTMENT_OUT` | ajuste de saldo (diferença para o saldo real) | só `accountId`; sempre `PAID` | não (é correção de saldo) |
 | `LOAN_RECEIPT` | dinheiro do empréstimo entrando na conta | `accountId` + `loanId` | não (é dívida, não receita) |
 | `LOAN_PAYMENT` | pagamento de empréstimo | `accountId` + `loanId`; divisão em `loanPrincipalCents` + `loanInterestCents` | **sim, a parcela inteira**, como despesa na categoria "Empréstimos" do resumo |
 
@@ -121,6 +123,31 @@ Efeito nos saldos:
 - **Conta:** `balanceCents` só conta o que foi confirmado; `projectedBalanceCents` inclui as previsões.
 - **Fatura:** `totalCents` só conta compras confirmadas; `projectedTotalCents` inclui as recorrências ainda previstas.
 - **Comparação:** a view `recurrence_variance` mostra previsto × pago de cada ocorrência confirmada.
+
+## Ajuste de saldo
+
+Para conciliar com o extrato, a conta tem a ação **"Ajustar saldo"**: você informa o saldo real numa data (até hoje). O app:
+
+1. calcula o saldo que tem nessa data (`account_balance_on(conta, data, false)`);
+2. lança a diferença como `ADJUSTMENT_IN` (entrada) ou `ADJUSTMENT_OUT` (saída). Se a diferença for zero, não lança nada;
+3. grava um `BalanceCheckpoint` com o saldo informado.
+
+**A partir daí, o saldo parte do valor ajustado.** A função `account_balance_on` soma, depois do último marco até a data:
+
+| Lançamento | Conta no saldo? |
+|---|---|
+| Efetivado com **data anterior** ao ajuste | **não**: fica só registrado (aparece com o selo "só registro") |
+| Efetivado **no dia do ajuste**, antes do ajuste | não (já estava no saldo informado) |
+| Efetivado **no dia do ajuste**, depois do ajuste | sim |
+| Efetivado com **data posterior** | sim |
+| **Pendente** (previsto), qualquer data | sim, no saldo previsto e ao ser confirmado, porque não estava no saldo do banco |
+
+"Efetivado depois" usa `Transaction.paidAt`, preenchido pelo banco quando o lançamento passa a `PAID`. Assim, uma conta pendente criada antes do ajuste e paga depois dele desconta normalmente.
+
+- Lançamentos "só registro" continuam nos relatórios, no resumo e no planejamento; só não mexem no saldo.
+- Novo ajuste só na data do último ajuste ou depois. Excluir o lançamento do ajuste apaga o marco, e o saldo volta a considerar tudo.
+- Depois de um ajuste, o saldo inicial da conta deixa de influenciar o saldo atual.
+- O saldo acumulado do resumo e a view `account_balances` usam a mesma função.
 
 ## Planejamento do mês: quanto posso gastar
 
@@ -253,6 +280,7 @@ No uso compartilhado, cada membro escolhe por grupo (`HouseholdMember.notifyDueI
 | Hora do aviso entre 0 e 23, fuso em formato IANA, endpoint de push `https://` | `CHECK` |
 | Lançamento de empréstimo sempre ligado a um empréstimo do mesmo grupo e a uma conta; outros tipos nunca ligados a empréstimo | `CHECK tx_shape_by_type` + trigger |
 | Amortização + juros = valor pago; juros ≥ 0; parcela do empréstimo não duplicada | `CHECK` + índice único |
+| Ajuste de saldo: só em conta, sempre efetivado, sem categoria; o marco aponta para um ajuste da mesma conta e data | `CHECK` + trigger |
 | Empréstimo: valor > 0; Price exige taxa e nº de parcelas; sem juros não tem taxa; quitado tem data de quitação | `CHECK` |
 
 Teste automatizado dessas regras: [`api/prisma/tests/integridade.sql`](../api/prisma/tests/integridade.sql) (roda numa transação e desfaz tudo).

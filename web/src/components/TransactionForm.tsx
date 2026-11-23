@@ -57,6 +57,9 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
   const creditCardId = source.startsWith("c:") ? source.slice(2) : null;
   const cents = parseMoney(amount);
   const n = Number(count);
+  const adjusted = [accounts.find((a) => a.id === accountId), kind === "TRANSFER" ? accounts.find((a) => a.id === toAccount) : undefined]
+    .filter((a) => a?.lastAdjustment && date < a.lastAdjustment.date)
+    .map((a) => a!);
 
   async function run(fn: () => Promise<unknown>) {
     setBusy(true);
@@ -236,6 +239,12 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
           </label>
         )}
       </div>
+
+      {adjusted.length > 0 && repeat === "ONCE" && (
+        <p className="info warn">
+          Data anterior ao ajuste de saldo de {adjusted.map((a) => `${a.name} (${a.lastAdjustment!.date.split("-").reverse().slice(0, 2).join("/")})`).join(", ")}: o lançamento fica só registrado e não muda o saldo.
+        </p>
+      )}
 
       {repeat === "RECURRING" && !editing && (
         <fieldset className="group">

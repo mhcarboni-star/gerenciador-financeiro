@@ -1,9 +1,10 @@
 import { useCallback, useEffect, useState, type FormEvent } from "react";
 import { useNavigate } from "react-router-dom";
 import { api, type Account, type AccountType, type CreditCard } from "../api";
-import { centsToInput, dayMonth, money, parseMoney } from "../format";
+import { centsToInput, dayMonth, money, parseMoney, shortDate } from "../format";
 import { Modal } from "../components/Modal";
 import { ColorPicker } from "../components/ColorPicker";
+import { AdjustBalanceModal } from "../components/AdjustBalanceModal";
 
 const ACCOUNT_TYPES: [AccountType, string][] = [
   ["CHECKING", "Conta corrente"],
@@ -14,7 +15,7 @@ const ACCOUNT_TYPES: [AccountType, string][] = [
 ];
 const typeLabel = (t: AccountType) => ACCOUNT_TYPES.find(([v]) => v === t)?.[1] ?? t;
 
-type Editing = { kind: "account"; item?: Account } | { kind: "card"; item?: CreditCard } | null;
+type Editing = { kind: "account"; item?: Account } | { kind: "card"; item?: CreditCard } | { kind: "adjust"; item: Account } | null;
 
 export function AccountsPage() {
   const [accounts, setAccounts] = useState<Account[]>([]);
@@ -88,6 +89,7 @@ export function AccountsPage() {
             {a.projectedBalanceCents !== a.balanceCents && (
               <span className="muted small">Previsto: {money(a.projectedBalanceCents)}</span>
             )}
+            {a.lastAdjustment && <span className="muted small">Saldo ajustado em {shortDate(a.lastAdjustment.date)}</span>}
           </button>
         ))}
         {accounts.length === 0 && <p className="muted empty">Nenhuma conta cadastrada.</p>}
@@ -135,8 +137,14 @@ export function AccountsPage() {
       </p>
 
       {editing?.kind === "account" && (
-        <AccountModal item={editing.item} onClose={() => setEditing(null)} onSaved={saved} />
+        <AccountModal
+          item={editing.item}
+          onClose={() => setEditing(null)}
+          onSaved={saved}
+          onAdjust={editing.item && !editing.item.archivedAt ? () => setEditing({ kind: "adjust", item: editing.item! }) : undefined}
+        />
       )}
+      {editing?.kind === "adjust" && <AdjustBalanceModal account={editing.item} onClose={() => setEditing(null)} onSaved={saved} />}
       {editing?.kind === "card" && (
         <CardModal item={editing.item} accounts={activeAccounts} onClose={() => setEditing(null)} onSaved={saved} />
       )}
@@ -180,7 +188,7 @@ function ArchiveActions({ archived, busy, onArchive, onRestore, what }: {
   );
 }
 
-function AccountModal({ item, onClose, onSaved }: { item?: Account; onClose: () => void; onSaved: () => void }) {
+function AccountModal({ item, onClose, onSaved, onAdjust }: { item?: Account; onClose: () => void; onSaved: () => void; onAdjust?: () => void }) {
   const [name, setName] = useState(item?.name ?? "");
   const [type, setType] = useState<AccountType>(item?.type ?? "CHECKING");
   const [institution, setInstitution] = useState(item?.institution ?? "");
@@ -218,10 +226,23 @@ function AccountModal({ item, onClose, onSaved }: { item?: Account; onClose: () 
             <input value={institution} onChange={(e) => setInstitution(e.target.value)} maxLength={60} />
           </label>
         </div>
+        {item && onAdjust && (
+          <div className="adjust-cta">
+            <div>
+              <span className="muted small">Saldo atual no app</span>
+              <strong>{money(item.balanceCents)}</strong>
+            </div>
+            <button type="button" className="btn ghost" onClick={onAdjust}>Ajustar saldo</button>
+          </div>
+        )}
         <label>
           Saldo inicial (R$)
           <input inputMode="decimal" value={initial} onChange={(e) => setInitial(e.target.value)} />
-          <span className="hint">Saldo da conta antes do primeiro lançamento no app. Use "-" se estiver negativo.</span>
+          <span className="hint">
+            {item?.lastAdjustment
+              ? `Desde o ajuste de ${shortDate(item.lastAdjustment.date)}, o saldo parte do valor ajustado; o saldo inicial não afeta mais o saldo atual.`
+              : "Saldo da conta antes do primeiro lançamento no app. Use \"-\" se estiver negativo. Para corrigir o saldo depois, use “Ajustar saldo”."}
+          </span>
         </label>
         <label className="check">
           <input type="checkbox" checked={includeInTotals} onChange={(e) => setInclude(e.target.checked)} />

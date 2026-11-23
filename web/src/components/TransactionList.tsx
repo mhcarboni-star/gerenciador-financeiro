@@ -6,6 +6,7 @@ function subtitle(t: Transaction) {
   if (t.type === "TRANSFER") parts.push(`${t.account?.name} → ${t.destinationAccount?.name}`);
   else if (t.type === "INVOICE_PAYMENT") parts.push(`Pagamento de fatura · ${t.account?.name}`);
   else if (t.type === "LOAN_PAYMENT") parts.push(`Empréstimo · ${t.account?.name}`);
+  else if (t.type === "ADJUSTMENT_IN" || t.type === "ADJUSTMENT_OUT") parts.push(`Correção de saldo · ${t.account?.name}`);
   else {
     parts.push(t.category?.name ?? "Sem categoria");
     const src = t.creditCard ?? t.account;
@@ -21,13 +22,17 @@ function amountView(t: Transaction) {
     case "TRANSFER":
     case "INVOICE_PAYMENT":
       return { cls: "neutral", text: money(t.amountCents) };
+    case "ADJUSTMENT_IN":
+      return { cls: "neutral", text: `+ ${money(t.amountCents)}` };
+    case "ADJUSTMENT_OUT":
+      return { cls: "neutral", text: `− ${money(t.amountCents)}` };
     default:
       return { cls: "neg", text: `− ${money(t.amountCents)}` };
   }
 }
 
 const dotColor = (t: Transaction) =>
-  t.type === "TRANSFER" || t.type === "INVOICE_PAYMENT" ? "#94a3b8" : t.type === "LOAN_PAYMENT" ? "#b45309" : (t.category?.color ?? "#94a3b8");
+  t.type === "TRANSFER" || t.type === "INVOICE_PAYMENT" || t.type === "ADJUSTMENT_IN" || t.type === "ADJUSTMENT_OUT" ? "#94a3b8" : t.type === "LOAN_PAYMENT" ? "#b45309" : (t.category?.color ?? "#94a3b8");
 
 export function TransactionList({ items, onSelect }: { items: Transaction[]; onSelect: (t: Transaction) => void }) {
   if (items.length === 0) return <p className="muted empty">Nenhum lançamento neste mês.</p>;
@@ -41,8 +46,9 @@ export function TransactionList({ items, onSelect }: { items: Transaction[]; onS
               <span className="dot" style={{ background: dotColor(t) }} />
               <span className="tx-main">
                 <span className="tx-desc">
-                  {t.description}
+                  <span className="tx-text">{t.description}</span>
                   {t.status === "PENDING" && <span className="badge">previsto</span>}
+                  {t.beforeAdjustment && <span className="badge" title="Data anterior ao ajuste de saldo: não muda o saldo">só registro</span>}
                 </span>
                 <span className="muted small">{subtitle(t)}</span>
               </span>

@@ -27,14 +27,20 @@ export function TransactionsPage() {
         (filter === "ALL" ||
           t.type === filter ||
           (filter === "EXPENSE" && t.type === "LOAN_PAYMENT") ||
-          (filter === "TRANSFER" && t.type === "INVOICE_PAYMENT")) &&
+          (filter === "TRANSFER" && ["INVOICE_PAYMENT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"].includes(t.type))) &&
         (!q || t.description.toLowerCase().includes(q) || t.category?.name.toLowerCase().includes(q)),
     );
   }, [items, filter, search]);
 
   // Transferências e pagamentos de fatura não mudam o resultado do mês.
   const total = visible.reduce(
-    (s, t) => s + (t.type === "INCOME" ? t.amountCents : t.type === "TRANSFER" || t.type === "INVOICE_PAYMENT" ? 0 : -t.amountCents),
+    (s, t) =>
+      s +
+      (t.type === "INCOME"
+        ? t.amountCents
+        : ["TRANSFER", "INVOICE_PAYMENT", "ADJUSTMENT_IN", "ADJUSTMENT_OUT"].includes(t.type)
+          ? 0
+          : -t.amountCents),
     0,
   );
 

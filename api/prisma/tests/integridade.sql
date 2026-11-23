@@ -121,6 +121,46 @@ SELECT pg_temp.expect_fail('quitado sem data de quitação', $q$UPDATE "Loan" SE
 SELECT pg_temp.expect_fail('empréstimo de outro grupo', $q$INSERT INTO "Loan"(id,"householdId",name,"principalCents","startDate","updatedAt") VALUES ('loanX','h2','x',100,'2026-11-01',now()); INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","loanId","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-12-01','acc1','loanX',now())$q$);
 SELECT pg_temp.expect_fail('recorrência de pagamento de empréstimo', $q$INSERT INTO "Recurrence"(id,"householdId",type,description,"amountCents","startDate","nextDate","accountId","updatedAt") VALUES ('x','h1','LOAN_PAYMENT','x',1,'2026-11-01','2026-11-01','acc1',now())$q$);
 
+
+-- ── Ajuste de saldo ──
+-- Saldo da Corrente no app em 31/12 (antes do ajuste)
+SELECT account_balance_on('acc1','2026-12-31',false) AS corrente_antes_do_ajuste;
+-- Extrato do banco diz R$ 10.000,00 em 31/12 → ajuste de saída da diferença
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","createdAt","updatedAt")
+  SELECT 'adj1','h1','ADJUSTMENT_OUT','Ajuste de saldo', account_balance_on('acc1','2026-12-31',false) - 1000000,'2026-12-31','acc1','2026-12-31 10:00',now();
+INSERT INTO "BalanceCheckpoint"(id,"accountId",date,"balanceCents","transactionId","createdAt") VALUES ('cp1','acc1','2026-12-31',1000000,'adj1','2026-12-31 10:00');
+SELECT account_balance_on('acc1','2026-12-31',false) = 1000000 AS saldo_bate_no_ajuste;
+-- Lançamento com data ANTERIOR ao ajuste: fica registrado, mas não muda o saldo
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","updatedAt") VALUES ('old1','h1','EXPENSE','Esquecido',5000,'2026-12-15','acc1',now());
+SELECT account_balance_on('acc1','2026-12-31',false) = 1000000 AS anterior_nao_muda;
+-- Mesmo dia, registrado DEPOIS do ajuste: conta
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","createdAt","updatedAt") VALUES ('same1','h1','EXPENSE','Padaria',1500,'2026-12-31','acc1','2026-12-31 15:00',now());
+UPDATE "Transaction" SET "paidAt" = '2026-12-31 15:00' WHERE id = 'same1';
+-- Data posterior: conta
+INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","updatedAt") VALUES ('new1','h1','INCOME','Pix recebido',20000,'2027-01-02','acc1',now());
+SELECT account_balance_on('acc1','2027-01-31',false) = 1000000 - 1500 + 20000 AS posteriores_contam;
+SELECT b."balanceCents" = account_balance_on('acc1','infinity',false) AS view_usa_a_regra FROM account_balances b WHERE b."accountId" = 'acc1';
+-- Pendente criado ANTES do ajuste e confirmado DEPOIS (mesmo dia) conta no saldo
+INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents",date,"accountId","createdAt","updatedAt") VALUES ('pend1','h1','EXPENSE','PENDING','Conta de água',8000,'2026-12-31','acc1','2026-12-30 08:00',now());
+-- (inclui também a conta de luz t5, pendente desde 28/11: pendente nunca fica congelada pelo ajuste)
+SELECT account_balance_on('acc1','2026-12-31',true) = 1000000 - 1500 - 8000 - 20000 AS pendente_conta_no_previsto;
+UPDATE "Transaction" SET status = 'PAID' WHERE id = 'pend1';
+UPDATE "Transaction" SET "paidAt" = '2026-12-31 16:00' WHERE id = 'pend1';
+SELECT account_balance_on('acc1','2026-12-31',false) = 1000000 - 1500 - 8000 AS pendente_confirmado_depois_conta;
+DELETE FROM "Transaction" WHERE id = 'pend1';
+-- Saldo numa data antes do ajuste continua calculado pelo histórico
+SELECT account_balance_on('acc1','2026-11-30',false) AS corrente_em_30_11;
+-- Excluir o ajuste (apaga o marco) faz o saldo voltar a considerar tudo
+SAVEPOINT antes_excluir;
+DELETE FROM "Transaction" WHERE id = 'adj1';
+SELECT NOT EXISTS (SELECT 1 FROM "BalanceCheckpoint" WHERE id = 'cp1') AS marco_removido_junto;
+ROLLBACK TO SAVEPOINT antes_excluir;
+
+SELECT pg_temp.expect_fail('ajuste com categoria', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"accountId","categoryId","updatedAt") VALUES ('x','h1','ADJUSTMENT_IN','x',1,'2026-12-01','acc1','cExp',now())$q$);
+SELECT pg_temp.expect_fail('ajuste pendente', $q$INSERT INTO "Transaction"(id,"householdId",type,status,description,"amountCents",date,"accountId","updatedAt") VALUES ('x','h1','ADJUSTMENT_IN','PENDING','x',1,'2026-12-01','acc1',now())$q$);
+SELECT pg_temp.expect_fail('ajuste no cartão', $q$INSERT INTO "Transaction"(id,"householdId",type,description,"amountCents",date,"creditCardId","invoiceId","updatedAt") VALUES ('x','h1','ADJUSTMENT_OUT','x',1,'2026-12-01','cc1','inv1',now())$q$);
+SELECT pg_temp.expect_fail('marco ligado a lançamento de outra conta', $q$INSERT INTO "BalanceCheckpoint"(id,"accountId",date,"balanceCents","transactionId") VALUES ('x','acc2','2026-12-31',0,'adj1')$q$);
+
 SELECT a.name, b."balanceCents", b."projectedBalanceCents" FROM account_balances b JOIN "Account" a ON a.id=b."accountId" ORDER BY 1;
 SELECT "invoiceId","totalCents","projectedTotalCents","paidCents" FROM invoice_totals;
 SELECT "loanId","principalOutstandingCents","totalPaidCents","interestPaidCents","pendingInstallments","nextDueDate" FROM loan_balances WHERE "loanId" = 'loan1';

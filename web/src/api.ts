@@ -1,5 +1,5 @@
 export type TxType = "INCOME" | "EXPENSE";
-export type AnyTxType = TxType | "TRANSFER" | "INVOICE_PAYMENT" | "LOAN_RECEIPT" | "LOAN_PAYMENT";
+export type AnyTxType = TxType | "TRANSFER" | "INVOICE_PAYMENT" | "LOAN_RECEIPT" | "LOAN_PAYMENT" | "ADJUSTMENT_IN" | "ADJUSTMENT_OUT";
 export type Frequency = "WEEKLY" | "MONTHLY" | "YEARLY";
 
 export interface User {
@@ -29,6 +29,7 @@ export interface Account {
   archivedAt: string | null;
   balanceCents: number;
   projectedBalanceCents: number;
+  lastAdjustment: { date: string; balanceCents: number } | null;
 }
 
 export type AccountInput = Pick<Account, "name" | "type" | "institution" | "initialBalanceCents" | "color" | "includeInTotals">;
@@ -82,6 +83,8 @@ export interface Transaction {
   expectedAmountCents: number | null;
   loan: { id: string; name: string } | null;
   recurrence?: { id: string; amountIsEstimate: boolean; amountCents: number } | null;
+  /** Data anterior ao último ajuste de saldo da conta: só registro, não muda o saldo. */
+  beforeAdjustment?: boolean;
 }
 
 export interface TransferInput {
@@ -349,6 +352,9 @@ export const api = {
   createAccount: (d: AccountInput) => request<Account>("/accounts", { method: "POST", body: json(d) }),
   updateAccount: (id: string, d: AccountInput) => request<Account>(`/accounts/${id}`, { method: "PUT", body: json(d) }),
   deleteAccount: (id: string) => request<{ archived: boolean }>(`/accounts/${id}`, { method: "DELETE" }),
+  accountBalanceOn: (id: string, date: string) => request<{ date: string; balanceCents: number }>(`/accounts/${id}/saldo?data=${date}`),
+  adjustBalance: (id: string, d: { balanceCents: number; date: string }) =>
+    request<{ previousBalanceCents: number; deltaCents: number }>(`/accounts/${id}/ajustar-saldo`, { method: "POST", body: json(d) }),
   restoreAccount: (id: string) => request<Account>(`/accounts/${id}/reativar`, { method: "POST" }),
 
   cards: (archived = false) => request<CreditCard[]>(`/cards${archived ? "?arquivados=1" : ""}`),

@@ -8,6 +8,7 @@ import { getOrCreateInvoice } from "../lib/invoiceStore.js";
 import { refreshInvoiceStatus } from "../lib/invoiceStatus.js";
 import { generateForHousehold } from "../lib/recurrenceService.js";
 import { addDays, todayIso } from "../lib/schedule.js";
+import { isBeforeCheckpoint, latestCheckpoints } from "../lib/balances.js";
 
 export const transactionsRouter = Router();
 
@@ -89,12 +90,25 @@ transactionsRouter.get(
   ah(async (req: AuthRequest, res) => {
     await generateForHousehold(hid(req));
     const month = typeof req.query.month === "string" ? req.query.month : currentMonth();
-    const list = await prisma.transaction.findMany({
-      where: { householdId: hid(req), type: { not: "LOAN_RECEIPT" }, date: monthRange(month) },
-      include: INCLUDE,
-      orderBy: [{ date: "desc" }, { createdAt: "desc" }],
-    });
-    res.json(list);
+    const [list, checkpoints] = await Promise.all([
+      prisma.transaction.findMany({
+        where: { householdId: hid(req), type: { not: "LOAN_RECEIPT" }, date: monthRange(month) },
+        include: INCLUDE,
+        orderBy: [{ date: "desc" }, { createdAt: "desc" }],
+      }),
+      latestCheckpoints(hid(req)),
+    ]);
+    // Marca o que ficou antes do último ajuste de saldo da conta (só registro).
+    res.json(
+      list.map((t) => ({
+        ...t,
+        beforeAdjustment:
+          t.type !== "ADJUSTMENT_IN" &&
+          t.type !== "ADJUSTMENT_OUT" &&
+          ((!!t.accountId && isBeforeCheckpoint(checkpoints.get(t.accountId), t)) ||
+            (!!t.destinationAccountId && isBeforeCheckpoint(checkpoints.get(t.destinationAccountId), t))),
+      })),
+    );
   }),
 );
 
