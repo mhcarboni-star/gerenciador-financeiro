@@ -7,6 +7,8 @@ export default defineConfig({
     react(),
     VitePWA({
       registerType: "autoUpdate",
+      // o registro é feito em src/main.tsx (com verificação periódica de versão nova)
+      injectRegister: false,
       includeAssets: ["icon.svg", "push-sw.js"],
       manifest: {
         name: "Gerenciador Financeiro",
@@ -28,6 +30,10 @@ export default defineConfig({
         navigateFallbackDenylist: [/^\/api\//],
         // Avisos no celular (push) e toque na notificação
         importScripts: ["push-sw.js"],
+        // versão nova assume na hora e apaga caches antigos
+        skipWaiting: true,
+        clientsClaim: true,
+        cleanupOutdatedCaches: true,
       },
     }),
   ],

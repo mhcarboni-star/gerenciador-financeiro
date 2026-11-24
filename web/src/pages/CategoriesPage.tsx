@@ -102,6 +102,9 @@ export function CategoriesPage() {
                           <span className="cat-name">{p.name}</span>
                           <span className="muted small">{subs.length ? `${subs.length} sub` : ""}</span>
                         </button>
+                        <button className="btn ghost add-sub-btn" onClick={() => setEditing({ kind: "newSub", parent: p })} aria-label={`Adicionar subcategoria em ${p.name}`} title="Adicionar subcategoria">
+                          + Sub
+                        </button>
                         <button className="link small" onClick={() => setEditing({ kind: "edit", item: p })}>Editar</button>
                       </div>
                       {isOpen && (
@@ -115,7 +118,7 @@ export function CategoriesPage() {
                             </li>
                           ))}
                           <li>
-                            <button className="link small add-sub" onClick={() => setEditing({ kind: "newSub", parent: p })}>+ Subcategoria</button>
+                            <button className="link small add-sub" onClick={() => setEditing({ kind: "newSub", parent: p })}>+ Adicionar subcategoria</button>
                           </li>
                         </ul>
                       )}
@@ -255,7 +258,7 @@ function CategoryModal({ editing, subs, onClose, onSaved, onDelete, onAddSub }: 
           <div className="group">
             <span className="small muted">Subcategorias</span>
             {subs.length === 0 ? <span className="muted small">Nenhuma ainda.</span> : <span className="small">{subs.map((s) => s.name).join(", ")}</span>}
-            <button type="button" className="link small" onClick={() => onAddSub(existing)}>+ Subcategoria</button>
+            <button type="button" className="btn ghost" onClick={() => onAddSub(existing)}>+ Adicionar subcategoria</button>
           </div>
         )}
 
