@@ -485,3 +485,10 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 @media (min-width: 860px) { .toast { bottom: 32px; left: calc(50% + 115px); } }
 .add-sub-btn { padding: 4px 10px; font-size: 0.85rem; border: 1px solid var(--border); }
 .group > .btn.ghost { align-self: flex-start; border: 1px solid var(--border); }
+
+/* ---------- Mais (celular) ---------- */
+.more-list { list-style: none; margin: 0; padding: 0; display: flex; flex-direction: column; gap: 10px; }
+.more-item { display: flex; align-items: center; gap: 14px; text-decoration: none; color: inherit; }
+.more-item:hover { border-color: var(--primary); }
+.more-icon { width: 40px; height: 40px; flex: none; display: grid; place-items: center; border-radius: 12px; background: var(--bg); font-size: 1.3rem; }
+.more-item .tx-main strong { font-size: 1rem; }

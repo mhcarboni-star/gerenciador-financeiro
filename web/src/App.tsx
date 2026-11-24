@@ -14,6 +14,7 @@ import { PlanPage } from "./pages/PlanPage";
 import { FamilyPage } from "./pages/FamilyPage";
 import { InvitePage } from "./pages/InvitePage";
 import { AlertsPage } from "./pages/AlertsPage";
+import { MorePage } from "./pages/MorePage";
 import { HouseholdProvider } from "./household";
 
 export function App() {
@@ -38,6 +39,7 @@ export function App() {
       <Route element={<Layout />}>
         <Route path="/familia" element={<FamilyPage />} />
         <Route path="/avisos" element={<AlertsPage />} />
+        <Route path="/mais" element={<MorePage />} />
         <Route path="/" element={<DashboardPage />} />
         <Route path="/lancamentos" element={<TransactionsPage />} />
         <Route path="/contas" element={<AccountsPage />} />

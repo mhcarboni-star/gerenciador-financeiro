@@ -1,5 +1,5 @@
 import { useEffect } from "react";
-import { NavLink, Outlet, useNavigate } from "react-router-dom";
+import { NavLink, Outlet, useLocation, useNavigate } from "react-router-dom";
 import { useHousehold } from "../household";
 import { PENDING_INVITE_KEY } from "../pages/InvitePage";
 import { useAuth } from "../auth";
@@ -9,16 +9,22 @@ const links = [
   { to: "/lancamentos", label: "Lançamentos", icon: "M4 6h16M4 12h16M4 18h10" },
   { to: "/planejamento", label: "Planejar", icon: "M4 5h16v15H4zM4 9h16M9 3v4M15 3v4M8 13h3M8 16h6" },
   { to: "/contas", label: "Contas", icon: "M3 7h18v12H3zM3 7l2-3h14l2 3M16 13h2" },
-  { to: "/emprestimos", label: "Empréstimos", icon: "M4 10h16M6 10V7l6-3 6 3v3M6 10v8M10 10v8M14 10v8M18 10v8M4 20h16" },
+  { to: "/emprestimos", desktopOnly: true, label: "Empréstimos", icon: "M4 10h16M6 10V7l6-3 6 3v3M6 10v8M10 10v8M14 10v8M18 10v8M4 20h16" },
   { to: "/avisos", desktopOnly: true, label: "Avisos", icon: "M6 8a6 6 0 1 1 12 0c0 7 3 8 3 8H3s3-1 3-8M10 20a2 2 0 0 0 4 0" },
   { to: "/familia", desktopOnly: true, label: "Família", icon: "M8 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM16 11a3 3 0 1 0 0-6 3 3 0 0 0 0 6zM2 20c0-3 3-5 6-5s6 2 6 5M14 15.5c.6-.3 1.3-.5 2-.5 3 0 6 2 6 5" },
   { to: "/categorias", desktopOnly: true, label: "Categorias", icon: "M4 4h7v7H4zM13 4h7v7h-7zM4 13h7v7H4zM13 13h7v7h-7z" },
+  { to: "/mais", mobileOnly: true, label: "Mais", icon: "M5 12h.01M12 12h.01M19 12h.01M4 6h16M4 18h16" },
 ];
+
+/** Telas que ficam dentro de "Mais" no celular (o botão fica ativo nelas). */
+export const MORE_PATHS = ["/mais", "/emprestimos", "/categorias", "/recorrencias", "/familia", "/avisos"];
 
 export function Layout() {
   const { user, logout } = useAuth();
   const { info } = useHousehold();
   const navigate = useNavigate();
+  const { pathname } = useLocation();
+  const inMore = MORE_PATHS.some((p) => pathname === p || pathname.startsWith(p + "/"));
   // Voltando do cadastro/login aberto por um convite: segue para aceitar
   useEffect(() => {
     try {
@@ -40,7 +46,14 @@ export function Layout() {
         </div>
         <nav className="nav">
           {links.map((l) => (
-            <NavLink key={l.to} to={l.to} end className={`nav-link ${"desktopOnly" in l ? "desktop-only" : ""}`}>
+            <NavLink
+              key={l.to}
+              to={l.to}
+              end={l.to === "/"}
+              className={({ isActive }) =>
+                `nav-link ${"desktopOnly" in l ? "desktop-only" : ""} ${"mobileOnly" in l ? "mobile-only" : ""} ${isActive || ("mobileOnly" in l && inMore) ? "active" : ""}`
+              }
+            >
               <svg viewBox="0 0 24 24" aria-hidden="true">
                 <path d={l.icon} />
               </svg>
