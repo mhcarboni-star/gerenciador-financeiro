@@ -468,3 +468,18 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .scope-options .btn .hint { font-weight: 400; }
 .scope-choice .link { align-self: flex-start; }
 @media (max-width: 420px) { .scope-options { grid-template-columns: 1fr; } }
+
+/* ---------- Categorias ---------- */
+.cat-list { list-style: none; margin: 0; padding: 0; }
+.cat-item + .cat-item { border-top: 1px solid var(--border); }
+.cat-row { display: flex; align-items: center; gap: 8px; }
+.cat-toggle { flex: 1; min-width: 0; display: flex; align-items: center; gap: 10px; padding: 12px 0; background: none; border: 0; text-align: left; cursor: pointer; }
+.cat-name { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-weight: 600; }
+.sub-list { list-style: none; margin: 0 0 10px 34px; padding: 0; border-left: 2px solid var(--border); }
+.sub-row { width: 100%; display: flex; justify-content: space-between; padding: 8px 12px; background: none; border: 0; text-align: left; cursor: pointer; }
+.sub-row:hover { background: var(--bg); }
+.add-sub { padding: 6px 12px; }
+.sub-input { display: flex; gap: 8px; align-items: center; }
+.toast { position: fixed; left: 50%; transform: translateX(-50%); bottom: calc(var(--nav-h) + 16px + env(safe-area-inset-bottom)); z-index: 30; display: flex; gap: 16px; align-items: center; padding: 12px 16px; border-radius: 12px; background: #0f172a; color: #fff; box-shadow: 0 8px 24px rgb(0 0 0 / 0.25); max-width: calc(100% - 32px); }
+.toast .link { color: #5eead4; font-weight: 700; }
+@media (min-width: 860px) { .toast { bottom: 32px; left: calc(50% + 115px); } }

@@ -9,7 +9,7 @@ Fonte da verdade: [`api/prisma/schema.prisma`](../api/prisma/schema.prisma) + mi
 2. **Dinheiro em centavos** (`Int`), sempre positivo. O sentido (entrada/saída) vem do `type` do lançamento.
 3. **Um lançamento por movimentação.** Transferência é *um* registro com origem e destino, não dois.
 4. **Integridade no banco**, não só na API: `CHECK`s e *triggers* barram dados inconsistentes mesmo se alguém editar pelo painel do Supabase.
-5. **Arquivar em vez de excluir** contas, cartões, categorias e metas (`archivedAt`), preservando o histórico.
+5. **Arquivar em vez de excluir** contas, cartões, categorias e metas (`archivedAt`), preservando o histórico. Excluir uma categoria principal arquiva junto as subcategorias, com o mesmo horário. **Restaurar** traz tudo de volta, e os lançamentos nunca perdem a categoria.
 
 ## Diagrama
 
@@ -306,7 +306,7 @@ No uso compartilhado, cada membro escolhe por grupo (`HouseholdMember.notifyDueI
 | Conta, cartão, fatura, categoria, parcelamento, recorrência e meta do mesmo grupo do lançamento | trigger `check_transaction_refs` |
 | Categoria do mesmo tipo do lançamento; fatura do mesmo cartão | trigger `check_transaction_refs` |
 | Subcategoria só 1 nível, mesmo grupo e tipo do pai | trigger `check_category_parent` |
-| Nome de categoria único por grupo/tipo/nível, ignorando maiúsculas | índice único |
+| Nome de categoria único por grupo/tipo/nível entre as **ativas**, ignorando maiúsculas | índice único parcial |
 | Um convite pendente por e-mail por grupo | índice único parcial |
 | Ocorrência de recorrência sempre com data programada; mesma ocorrência não gerada duas vezes | `CHECK` + índice único `(recurrenceId, occurrenceDate)` |
 | Recorrência de valor estimado não pode ser gerada já como paga | `CHECK` |

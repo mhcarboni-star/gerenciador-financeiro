@@ -243,6 +243,9 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
               {categoryOptions(categories, type).map((c) => (
                 <option key={c.id} value={c.id}>{c.label}</option>
               ))}
+              {initial?.category && initial.category.id === categoryId && !categories.some((c) => c.id === categoryId) && (
+                <option value={initial.category.id}>{initial.category.name} (excluída)</option>
+              )}
             </select>
           </label>
         )}

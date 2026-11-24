@@ -33,6 +33,7 @@ export interface Category {
   type: TxType;
   color: string;
   parentId: string | null;
+  archivedAt?: string | null;
 }
 
 export type AccountType = "CHECKING" | "SAVINGS" | "CASH" | "INVESTMENT" | "OTHER";
@@ -424,11 +425,13 @@ export const api = {
   me: () => request<User>("/auth/me"),
 
   categories: () => request<Category[]>("/categories"),
-  createCategory: (d: Omit<Category, "id" | "parentId"> & { parentId?: string | null }) =>
+  categoriesWithArchived: () => request<Category[]>("/categories?arquivadas=1"),
+  restoreCategory: (id: string) => request<{ restoredIds: string[] }>(`/categories/${id}/restaurar`, { method: "POST" }),
+  createCategory: (d: { name: string; type: TxType; color?: string; parentId?: string | null; children?: string[] }) =>
     request<Category>("/categories", { method: "POST", body: json(d) }),
   updateCategory: (id: string, d: Partial<Omit<Category, "id">>) =>
     request<Category>(`/categories/${id}`, { method: "PUT", body: json(d) }),
-  deleteCategory: (id: string) => request<void>(`/categories/${id}`, { method: "DELETE" }),
+  deleteCategory: (id: string) => request<{ archivedIds: string[] }>(`/categories/${id}`, { method: "DELETE" }),
 
   transactions: (month: string) => request<Transaction[]>(`/transactions?month=${month}`),
   createTransaction: (d: TransactionInput) =>
