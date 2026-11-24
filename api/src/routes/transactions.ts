@@ -10,6 +10,8 @@ import { generateForHousehold } from "../lib/recurrenceService.js";
 import { addDays, todayIso } from "../lib/schedule.js";
 import { isBeforeCheckpoint, latestCheckpoints } from "../lib/balances.js";
 import { resolveResponsible } from "../lib/members.js";
+import { cutAfter, endBefore, nextDateForNewSeries } from "../lib/recurrenceEdit.js";
+import { generateOccurrences } from "../lib/recurrenceService.js";
 
 export const transactionsRouter = Router();
 
@@ -28,6 +30,8 @@ const schema = z.object({
   notes: z.string().trim().max(500).nullable().optional(),
   /** null = Família (conjunto); omitido = quem está lançando (ou mantém, na edição) */
   responsibleId: z.string().nullable().optional(),
+  /** Lançamento recorrente: "this" = só este; "future" = este e os próximos */
+  scope: z.enum(["this", "future"]).optional(),
 });
 
 const transferSchema = z
@@ -159,13 +163,60 @@ transactionsRouter.put(
     const id = req.params.id as string;
     const old = await own(req, id);
     if (old.type !== "INCOME" && old.type !== "EXPENSE") throw new HttpError(400, "Este lançamento é editado em outra tela");
-    const data = schema.parse(req.body);
+    const { scope, ...data } = schema.parse(req.body);
     await checkCategory(req, data.categoryId, data.type);
     const source = await resolveSource(req, data);
     const responsibleId = data.responsibleId === undefined ? old.responsibleId : await resolveResponsible(hid(req), uid(req), data.responsibleId);
+
+    // Este e os próximos: encerra a série antiga antes deste mês e começa uma nova com os dados editados
+    if (scope === "future" && old.recurrenceId && old.occurrenceDate) {
+      const rec = await prisma.recurrence.findUniqueOrThrow({ where: { id: old.recurrenceId } });
+      const occ = old.occurrenceDate.toISOString().slice(0, 10);
+      const newRecId = await prisma.$transaction(async (tx) => {
+        const lastKept = await cutAfter(tx, rec, occ);
+        // a ocorrência editada sai da série antiga antes de encerrá-la
+        await tx.transaction.update({ where: { id }, data: { recurrenceId: null, occurrenceDate: null } });
+        await endBefore(tx, rec, occ);
+        const created = await tx.recurrence.create({
+          data: {
+            householdId: rec.householdId,
+            type: data.type,
+            description: data.description,
+            amountCents: data.amountCents,
+            frequency: rec.frequency,
+            interval: rec.interval,
+            startDate: toDate(data.date),
+            endDate: rec.endDate && rec.endDate >= toDate(data.date) ? rec.endDate : null,
+            nextDate: toDate(nextDateForNewSeries(rec, data.date, lastKept)),
+            accountId: source.accountId,
+            creditCardId: source.creditCardId,
+            categoryId: data.categoryId ?? null,
+            amountIsEstimate: rec.amountIsEstimate,
+            autoMarkPaid: rec.autoMarkPaid,
+            responsibleId,
+          },
+        });
+        await tx.transaction.update({
+          where: { id },
+          data: {
+            ...data, ...source, responsibleId, date: toDate(data.date),
+            recurrenceId: created.id, occurrenceDate: toDate(data.date),
+            expectedAmountCents: old.status === "PENDING" ? data.amountCents : old.expectedAmountCents,
+          },
+        });
+        return created.id;
+      });
+      await generateOccurrences(newRecId);
+      return res.json(await prisma.transaction.findUnique({ where: { id }, include: INCLUDE }));
+    }
+
     const t = await prisma.transaction.update({
       where: { id },
-      data: { ...data, ...source, responsibleId, date: toDate(data.date) },
+      data: {
+        ...data, ...source, responsibleId, date: toDate(data.date),
+        // previsto editado: o valor previsto acompanha
+        ...(old.status === "PENDING" && old.recurrenceId ? { expectedAmountCents: data.amountCents } : {}),
+      },
       include: INCLUDE,
     });
     res.json(t);
@@ -280,6 +331,18 @@ transactionsRouter.delete(
     const id = req.params.id as string;
     const t = await own(req, id);
     if (t.type === "LOAN_RECEIPT" || t.type === "LOAN_PAYMENT") throw new HttpError(400, "Pagamentos de empréstimo são excluídos na aba Empréstimos");
+    // ?escopo=futuras: este e as próximas ocorrências (encerra a recorrência a partir daqui)
+    if (req.query.escopo === "futuras" && t.recurrenceId && t.occurrenceDate) {
+      const rec = await prisma.recurrence.findUniqueOrThrow({ where: { id: t.recurrenceId } });
+      const occ = t.occurrenceDate.toISOString().slice(0, 10);
+      await prisma.$transaction(async (tx) => {
+        await cutAfter(tx, rec, occ);
+        await tx.transaction.delete({ where: { id } });
+        await endBefore(tx, rec, occ);
+      });
+      if (t.invoiceId) await refreshInvoiceStatus(t.invoiceId).catch(() => {});
+      return res.status(204).end();
+    }
     await prisma.transaction.delete({ where: { id } });
     if (t.invoiceId) await refreshInvoiceStatus(t.invoiceId);
     res.status(204).end();

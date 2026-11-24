@@ -3,6 +3,7 @@ import { api, type Account, type Category, type CreditCard, type Frequency, type
 import { centsToInput, money, parseMoney, today } from "../format";
 import { useHousehold } from "../household";
 import { ResponsibleSelect } from "./ResponsibleSelect";
+import { ScopeChoice } from "./ScopeChoice";
 
 interface Props {
   categories: Category[];
@@ -55,6 +56,9 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
   const [auto, setAuto] = useState(false);
   const [error, setError] = useState("");
   const [busy, setBusy] = useState(false);
+  // lançamento recorrente: pergunta "só este / este e os próximos" antes de salvar ou excluir
+  const [asking, setAsking] = useState<"save" | "delete" | null>(null);
+  const recurring = !!initial?.recurrenceId;
 
   const type: TxType = kind === "INCOME" ? "INCOME" : "EXPENSE";
   const accountId = source.startsWith("a:") ? source.slice(2) : null;
@@ -77,9 +81,10 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
     }
   }
 
-  function submit(e: FormEvent) {
+  function submit(e: FormEvent, scope?: "this" | "future") {
     e.preventDefault();
     if (!cents || cents <= 0) return setError("Informe um valor válido, ex.: 45,90");
+    if (recurring && kind !== "TRANSFER" && !scope) return setAsking("save");
     const base = { description, categoryId: categoryId || null, notes: notes.trim() || null, responsibleId };
 
     if (kind === "TRANSFER") {
@@ -99,11 +104,10 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
         }),
       );
     }
-    const data = { ...base, type, amountCents: cents, date, accountId, creditCardId };
+    const data = { ...base, type, amountCents: cents, date, accountId, creditCardId, ...(scope ? { scope } : {}) };
     return run(() => (editing ? api.updateTransaction(initial!.id, data) : api.createTransaction(data)));
   }
 
-  const deleteLabel = initial?.recurrenceId && initial.status === "PENDING" ? "Pular esta" : "Excluir";
 
   return (
     <form onSubmit={submit} className="form">
@@ -139,7 +143,7 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
         <p className="info">Parcela {initial.installmentNumber} de um parcelamento. As outras parcelas não mudam.</p>
       )}
       {initial?.recurrenceId && (
-        <p className="info">Ocorrência de um lançamento recorrente. Para mudar as próximas, edite em Lançamentos › Recorrentes.</p>
+        <p className="info">Lançamento recorrente. Ao salvar ou excluir, você escolhe se vale só para este ou também para os próximos.</p>
       )}
 
       {kind !== "TRANSFER" && !editing && (
@@ -290,6 +294,20 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
         <textarea rows={2} value={notes} onChange={(e) => setNotes(e.target.value)} maxLength={500} />
       </label>
       {error && <p className="error">{error}</p>}
+      {asking ? (
+        <ScopeChoice
+          action={asking}
+          busy={busy}
+          onCancel={() => setAsking(null)}
+          onChoose={(scope) => {
+            if (asking === "delete") {
+              void run(() => api.deleteTransaction(initial!.id, scope));
+            } else {
+              submit({ preventDefault() {} } as FormEvent, scope);
+            }
+          }}
+        />
+      ) : (
       <div className="actions">
         {initial?.installmentPlanId && (
           <button
@@ -306,15 +324,16 @@ export function TransactionForm({ categories, accounts, cards, initial, onSaved 
             type="button"
             className="btn danger-ghost"
             disabled={busy}
-            onClick={() => confirm(deleteLabel === "Excluir" ? "Excluir este lançamento?" : "Pular esta ocorrência? As próximas continuam.") && run(() => api.deleteTransaction(initial.id))}
+            onClick={() => (recurring ? setAsking("delete") : confirm("Excluir este lançamento?") && run(() => api.deleteTransaction(initial.id)))}
           >
-            {deleteLabel}
+            Excluir
           </button>
         )}
         <button className="btn primary" disabled={busy}>
           {busy ? "Salvando…" : "Salvar"}
         </button>
       </div>
+      )}
     </form>
   );
 }

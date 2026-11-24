@@ -48,7 +48,7 @@ export function useTransactionEditor(onChange: () => void) {
   } else if (state?.mode === "confirm") {
     modal = (
       <Modal title={state.tx.type === "INCOME" ? "Confirmar recebimento" : "Confirmar pagamento"} onClose={close}>
-        <ConfirmForm tx={state.tx} accounts={accounts} cards={cards} onSaved={done} />
+        <ConfirmForm tx={state.tx} accounts={accounts} cards={cards} onSaved={done} onEdit={() => setState({ mode: "edit", tx: state.tx })} />
       </Modal>
     );
   } else if (state?.mode === "edit" && !["INCOME", "EXPENSE", "TRANSFER"].includes(state.tx.type)) {

@@ -1,14 +1,16 @@
 import { useState, type FormEvent } from "react";
 import { api, type Account, type CreditCard, type Transaction } from "../api";
 import { centsToInput, money, parseMoney, shortDate, today } from "../format";
+import { ScopeChoice } from "./ScopeChoice";
 
 /**
  * Confirmar um lançamento previsto: corrige valor, data e conta/cartão.
  * "Usar como nova previsão" vem desmarcado (só vale para recorrências).
  */
-export function ConfirmForm({ tx, accounts, cards, onSaved }: {
-  tx: Transaction; accounts: Account[]; cards: CreditCard[]; onSaved: () => void;
+export function ConfirmForm({ tx, accounts, cards, onSaved, onEdit }: {
+  tx: Transaction; accounts: Account[]; cards: CreditCard[]; onSaved: () => void; onEdit?: () => void;
 }) {
+  const [askingDelete, setAskingDelete] = useState(false);
   const expected = tx.expectedAmountCents ?? tx.amountCents;
   const estimate = !!tx.recurrence?.amountIsEstimate;
   const [amount, setAmount] = useState(estimate ? "" : centsToInput(tx.amountCents));
@@ -97,21 +99,28 @@ export function ConfirmForm({ tx, accounts, cards, onSaved }: {
         </label>
       )}
       {error && <p className="error">{error}</p>}
-      <div className="actions">
-        {tx.recurrenceId && (
+      {askingDelete ? (
+        <ScopeChoice action="delete" busy={busy} onCancel={() => setAskingDelete(false)} onChoose={(scope) => run(() => api.deleteTransaction(tx.id, scope))} />
+      ) : (
+        <div className="actions">
+          {onEdit && (
+            <button type="button" className="btn ghost" disabled={busy} onClick={onEdit}>
+              Editar
+            </button>
+          )}
           <button
             type="button"
             className="btn danger-ghost"
             disabled={busy}
-            onClick={() => confirm("Pular esta ocorrência? As próximas continuam.") && run(() => api.deleteTransaction(tx.id))}
+            onClick={() => (tx.recurrenceId ? setAskingDelete(true) : confirm("Excluir este lançamento previsto?") && run(() => api.deleteTransaction(tx.id)))}
           >
-            Pular
+            Excluir
           </button>
-        )}
-        <button className="btn primary" disabled={busy}>
-          {busy ? "Salvando…" : "Confirmar"}
-        </button>
-      </div>
+          <button className="btn primary" disabled={busy}>
+            {busy ? "Salvando…" : "Confirmar"}
+          </button>
+        </div>
+      )}
     </form>
   );
 }

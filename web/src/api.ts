@@ -331,6 +331,7 @@ export interface TransactionInput {
   creditCardId: string | null;
   status?: "PAID" | "PENDING";
   responsibleId?: string | null;
+  scope?: "this" | "future";
 }
 
 export interface Summary {
@@ -434,7 +435,8 @@ export const api = {
     request<Transaction>("/transactions", { method: "POST", body: json(d) }),
   updateTransaction: (id: string, d: TransactionInput) =>
     request<Transaction>(`/transactions/${id}`, { method: "PUT", body: json(d) }),
-  deleteTransaction: (id: string) => request<void>(`/transactions/${id}`, { method: "DELETE" }),
+  deleteTransaction: (id: string, scope: "this" | "future" = "this") =>
+    request<void>(`/transactions/${id}${scope === "future" ? "?escopo=futuras" : ""}`, { method: "DELETE" }),
 
   accounts: (archived = false) => request<Account[]>(`/accounts${archived ? "?arquivadas=1" : ""}`),
   createAccount: (d: AccountInput) => request<Account>("/accounts", { method: "POST", body: json(d) }),

@@ -109,7 +109,13 @@ Se a recorrência tiver `autoMarkPaid` (valor fixo, débito automático), a ocor
 
 Status passa para `PAID`.
 
-**3. Outras ações.** *Pular* uma ocorrência = excluí-la (como `nextDate` já avançou, ela não é recriada). *Encerrar* a recorrência = `endDate` ou `active = false`; as ocorrências pendentes futuras são removidas.
+**3. Editar ou excluir uma ocorrência.** O app pergunta **"Só este"** ou **"Este e os próximos"**.
+- **Excluir só este:** apaga só aquela ocorrência. Como `nextDate` já avançou, ela não é recriada.
+- **Excluir este e os próximos:** remove as ocorrências seguintes que ainda não foram confirmadas (ou que têm data futura) e encerra a recorrência na véspera. As confirmadas do passado ficam no histórico.
+- **Editar só este:** muda só aquele lançamento.
+- **Editar este e os próximos:** encerra a série antiga na véspera e cria uma **nova recorrência** começando na data editada, com os novos valor, descrição, categoria, conta/cartão e responsável. As ocorrências seguintes são refeitas. Também serve para mudar o dia do mês.
+
+Encerrar pela tela de Recorrentes faz o mesmo que excluir a partir de hoje.
 
 | Flag da recorrência | Uso típico | Comportamento |
 |---|---|---|

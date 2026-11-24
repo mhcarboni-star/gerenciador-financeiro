@@ -460,3 +460,11 @@ input:focus, select:focus, textarea:focus { outline: 2px solid var(--primary); o
 .alert-tip .btn { text-decoration: none; padding: 8px 14px; }
 .alert-link { display: flex; justify-content: space-between; align-items: center; gap: 12px; text-decoration: none; color: inherit; }
 .alert-link:hover { border-color: var(--primary); }
+
+/* ---------- Só este / este e os próximos ---------- */
+.scope-choice { display: flex; flex-direction: column; gap: 8px; padding: 12px; border: 1px solid var(--primary); border-radius: 12px; background: var(--bg); }
+.scope-options { display: grid; grid-template-columns: 1fr 1fr; gap: 8px; }
+.scope-options .btn { text-align: left; border: 1px solid var(--border); background: var(--surface); padding: 10px 12px; }
+.scope-options .btn .hint { font-weight: 400; }
+.scope-choice .link { align-self: flex-start; }
+@media (max-width: 420px) { .scope-options { grid-template-columns: 1fr; } }
