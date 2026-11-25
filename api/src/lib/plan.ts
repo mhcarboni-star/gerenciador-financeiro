@@ -32,11 +32,18 @@ export interface PlanItem {
   responsibleId?: string | null; // null = Família (conjunto)
 }
 
-export function commitmentKind(i: PlanItem): CommitmentKind | null {
+/**
+ * Compromisso = já se sabe que vai acontecer: recorrência, parcela, empréstimo, ou lançamento
+ * avulso previsto (pendente) ou com data FUTURA (já lançado para frente, mesmo marcado como pago).
+ * Gasto do dia a dia = compra avulsa com data de hoje ou anterior.
+ * No cartão, vale a data da compra (a fatura futura não torna a compra um compromisso).
+ */
+export function commitmentKind(i: PlanItem, today?: string): CommitmentKind | null {
   if (i.type === "LOAN_PAYMENT") return "LOAN";
   if (i.installmentPlanId) return "INSTALLMENT";
   if (i.recurrenceId) return "FIXED";
   if (i.status === "PENDING") return "PLANNED";
+  if (today && i.date > today) return "PLANNED";
   return null; // gasto do dia a dia
 }
 
@@ -74,7 +81,7 @@ export function computePlan(items: PlanItem[], opts: { month: string; savingsGoa
     }
     // estorno no cartão reduz a fatura (conta como gasto negativo)
     const amount = i.type === "INCOME" ? -i.amountCents : i.amountCents;
-    const kind = i.type === "INCOME" ? null : commitmentKind(i);
+    const kind = i.type === "INCOME" ? null : commitmentKind(i, opts.today);
     if (kind) {
       byKind[kind] += amount;
     } else {

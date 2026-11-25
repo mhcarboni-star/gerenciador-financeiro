@@ -93,8 +93,8 @@ planRouter.get(
 
     const name = (id: string | null | undefined) => (id ? (members.find((m) => m.userId === id)?.name ?? "Ex-membro") : "Família");
     const commitments = items
-      .filter((i) => i.type !== "INCOME" && commitmentKind(i))
-      .map((i) => ({ ...i, kind: commitmentKind(i), responsibleName: name(i.responsibleId) }))
+      .filter((i) => i.type !== "INCOME" && commitmentKind(i, today))
+      .map((i) => ({ ...i, kind: commitmentKind(i, today), responsibleName: name(i.responsibleId) }))
       .sort((a, b) => a.cashDate.localeCompare(b.cashDate));
     const incomes = items
       .filter((i) => i.type === "INCOME" && !i.viaCard)

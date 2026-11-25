@@ -17,8 +17,8 @@ test("disponível = receitas − compromissos − guardar; resta desconta o dia 
     item({ type: "LOAN_PAYMENT", amountCents: 94_560, status: "PENDING" }), // empréstimo
     item({ amountCents: 35_000, installmentPlanId: "gel", viaCard: true, date: "2026-11-20", cashDate: "2026-12-10" }), // parcela no cartão
     item({ amountCents: 120_000, status: "PENDING" }), // previsão (IPVA)
-    item({ amountCents: 30_000, categoryId: "mercado" }), // dia a dia na conta
-    item({ amountCents: 15_000, categoryId: "lazer", viaCard: true, date: "2026-11-25", cashDate: "2026-12-10" }), // compra no cartão em nov, vence dez
+    item({ amountCents: 30_000, categoryId: "mercado", viaCard: true, date: "2026-11-21", cashDate: "2026-12-10" }), // dia a dia (cartão, vence em dez)
+    item({ amountCents: 15_000, categoryId: "lazer", viaCard: true, date: "2026-11-20", cashDate: "2026-12-10" }), // compra no cartão em nov, vence dez
   ];
   const r = computePlan(items, { month: "2026-12", savingsGoalCents: 50_000, today: "2026-11-23" });
   assert.equal(r.incomeCents, 600_000);
@@ -27,7 +27,7 @@ test("disponível = receitas − compromissos − guardar; resta desconta o dia 
   assert.equal(r.availableCents, 600_000 - 447_560 - 50_000); // 102.440
   assert.equal(r.variableSpentCents, 45_000);
   assert.equal(r.remainingCents, 102_440 - 45_000);
-  assert.equal(r.cardCarryCents, 15_000);
+  assert.equal(r.cardCarryCents, 45_000);
   assert.equal(r.spentByCategory.get("mercado"), 30_000);
   assert.equal(r.daysLeft, 31); // mês futuro: inteiro
   assert.equal(r.perDayCents, Math.floor(57_440 / 31));
@@ -36,9 +36,9 @@ test("disponível = receitas − compromissos − guardar; resta desconta o dia 
 test("estorno no cartão reduz o gasto; dias restantes no mês atual", () => {
   const r = computePlan(
     [
-      item({ type: "INCOME", amountCents: 100_000 }),
-      item({ amountCents: 20_000, viaCard: true, categoryId: "c" }),
-      item({ type: "INCOME", amountCents: 5_000, viaCard: true, categoryId: "c" }),
+      item({ type: "INCOME", amountCents: 100_000, date: "2026-11-05" }),
+      item({ amountCents: 20_000, viaCard: true, categoryId: "c", date: "2026-11-10" }),
+      item({ type: "INCOME", amountCents: 5_000, viaCard: true, categoryId: "c", date: "2026-11-12" }),
     ],
     { month: "2026-11", savingsGoalCents: 0, today: "2026-11-23" },
   );
@@ -49,8 +49,23 @@ test("estorno no cartão reduz o gasto; dias restantes no mês atual", () => {
 });
 
 test("mês passado não tem dias restantes; gasto além do disponível deixa 'resta' negativo", () => {
-  const r = computePlan([item({ type: "INCOME", amountCents: 10_000 }), item({ amountCents: 15_000 })], { month: "2026-10", savingsGoalCents: 0, today: "2026-11-23" });
+  const r = computePlan([item({ type: "INCOME", amountCents: 10_000, date: "2026-10-05" }), item({ amountCents: 15_000, date: "2026-10-10" })], { month: "2026-10", savingsGoalCents: 0, today: "2026-11-23" });
   assert.equal(r.remainingCents, -5_000);
   assert.equal(r.daysLeft, 0);
   assert.equal(r.perDayCents, 0);
+});
+
+test("avulso já lançado com data futura (mesmo pago) é compromisso, não gasto do dia a dia", () => {
+  const r = computePlan(
+    [
+      item({ type: "INCOME", amountCents: 1_850_251, recurrenceId: "sal", status: "PENDING", date: "2026-12-05" }),
+      item({ amountCents: 573_700, status: "PAID", date: "2026-12-10", categoryId: "educacao" }), // escola, lançada adiantada
+      item({ amountCents: 30_000, status: "PAID", date: "2026-11-20", categoryId: "mercado" }), // compra de hoje no cartão, vence em dez
+    ].map((x, i) => (i === 2 ? { ...x, viaCard: true, cashDate: "2026-12-10" } : x)),
+    { month: "2026-12", savingsGoalCents: 0, today: "2026-11-25" },
+  );
+  assert.equal(r.commitmentsByKind.PLANNED, 573_700);
+  assert.equal(r.variableSpentCents, 30_000);
+  assert.equal(r.availableCents, 1_850_251 - 573_700);
+  assert.equal(r.remainingCents, 1_850_251 - 573_700 - 30_000);
 });

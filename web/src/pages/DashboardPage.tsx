@@ -122,8 +122,12 @@ export function DashboardPage() {
           </Link>
           <Link to={`/planejamento?mes=${nextPlan.month}`} className="card plan-mini">
             <span className="muted small">{family ? "A família pode gastar" : "Posso gastar"} em {curName(nextPlan.month)}</span>
-            <strong className={nextPlan.availableCents < 0 ? "neg" : ""}>{money(nextPlan.availableCents)}</strong>
-            <span className="muted small">Planejar próximo mês ›</span>
+            <strong className={nextPlan.remainingCents < 0 ? "neg" : ""}>{money(nextPlan.remainingCents)}</strong>
+            <span className="muted small">
+              {nextPlan.incomeCents === 0
+                ? "Cadastre as receitas previstas ›"
+                : `já descontado o lançado · ${money(nextPlan.incomeCents)} de receitas ›`}
+            </span>
           </Link>
         </section>
       )}

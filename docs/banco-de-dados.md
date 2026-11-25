@@ -185,8 +185,8 @@ Cada saída do mês é classificada como:
 
 | Classe | O que entra |
 |---|---|
-| **Compromisso** | ocorrências de recorrência (contas fixas), parcelas, parcelas de empréstimo e previsões cadastradas (lançamentos `PENDING` avulsos, ex.: IPVA) |
-| **Gasto do dia a dia** | compras avulsas (consomem o disponível conforme acontecem) |
+| **Compromisso** | ocorrências de recorrência (contas fixas), parcelas, parcelas de empréstimo, previsões cadastradas (lançamentos `PENDING` avulsos, ex.: IPVA) e lançamentos avulsos com **data futura**, mesmo já marcados como pagos (ex.: mensalidade lançada adiantada) |
+| **Gasto do dia a dia** | compras avulsas com data de hoje ou anterior (consomem o disponível conforme acontecem). No cartão, vale a data da compra |
 
 ```
 Disponível para gastar = receitas previstas − compromissos − quanto quero guardar (MonthPlan.savingsGoalCents)
